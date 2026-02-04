@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Tools</title>
+    <script>
+        // Apply saved theme immediately to prevent flash
+        (function() {
+            const savedTheme = localStorage.getItem('theme');
+            const theme = savedTheme !== null ? savedTheme : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h1>Online Tools</h1>
+            <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="사이드바 접기">☰</button>
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <a href="#/viewer" class="nav-link" data-category="viewer">
+                    <span class="nav-icon">M↓</span>
+                    <span>Viewer</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#/string" class="nav-link" data-category="string">
+                    <span class="nav-icon">Aa</span>
+                    <span>String</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#/formatter" class="nav-link" data-category="formatter">
+                    <span class="nav-icon">{ }</span>
+                    <span>Formatter</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#/encoding" class="nav-link" data-category="encoding">
+                    <span class="nav-icon">&#60;/&#62;</span>
+                    <span>Encoding</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#/converter" class="nav-link" data-category="converter">
+                    <span class="nav-icon">⇄</span>
+                    <span>Converter</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#/encrypt" class="nav-link" data-category="encrypt">
+                    <span class="nav-icon">#</span>
+                    <span>Encrypt</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#/calculator" class="nav-link" data-category="calculator">
+                    <span class="nav-icon">Σ</span>
+                    <span>Calculator</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#/generator" class="nav-link" data-category="generator">
+                    <span class="nav-icon">⚙</span>
+                    <span>Generator</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#/command" class="nav-link" data-category="command">
+                    <span class="nav-icon">></span>
+                    <span>Command</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#/downloader" class="nav-link" data-category="downloader">
+                    <span class="nav-icon">⬇</span>
+                    <span>Downloader</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#/network" class="nav-link" data-category="network">
+                    <span class="nav-icon">🌐</span>
+                    <span>Network</span>
+                </a>
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="theme-toggle" id="themeToggle">
+                <span class="theme-toggle-icon" id="themeIcon">🌙</span>
+                <span class="theme-toggle-label" id="themeLabel">Dark</span>
+                <div class="theme-toggle-switch"></div>
+            </div>
+        </div>
+    </nav>
+
+    <button class="sidebar-toggle" id="sidebarToggle">☰</button>
+
+    <main class="main-content">
+        <div id="app"></div>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
