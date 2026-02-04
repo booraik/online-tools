@@ -2,6 +2,127 @@
 (function() {
     'use strict';
 
+    // Server Mode Manager - Backend 연동 시 추가 기능 제공
+    const serverMode = {
+        enabled: false,
+        authenticated: false,
+        backendUrl: '/api',
+
+        init() {
+            const toggle = document.getElementById('authToggle');
+
+            // file:// 프로토콜이면 토글 비활성화
+            if (window.location.protocol === 'file:') {
+                if (toggle) {
+                    toggle.disabled = true;
+                    toggle.parentElement.title = 'Server mode requires HTTP';
+                }
+                return;
+            }
+
+            // 로그인 후 돌아온 경우 인증 상태 확인
+            if (sessionStorage.getItem('serverModeLoginAttempt')) {
+                sessionStorage.removeItem('serverModeLoginAttempt');
+                this.checkAuthStatus();
+            }
+        },
+
+        updateAuthUI() {
+            const label = document.getElementById('authLabel');
+            const toggle = document.getElementById('authToggle');
+
+            if (this.authenticated) {
+                if (label) {
+                    label.textContent = 'Authorized';
+                    label.classList.add('authorized');
+                }
+                if (toggle) toggle.checked = true;
+            } else {
+                if (label) {
+                    label.textContent = 'Guest';
+                    label.classList.remove('authorized');
+                }
+                if (toggle) toggle.checked = false;
+            }
+        },
+
+        async checkAuthStatus() {
+            try {
+                const response = await fetch('/api/auth/check', { credentials: 'include' });
+                if (response.ok) {
+                    const data = await response.json();
+                    this.enabled = true;
+                    this.authenticated = data.authenticated;
+                    this.updateAuthUI();
+                }
+            } catch (e) {
+                // Backend 없음
+                this.enabled = false;
+                this.authenticated = false;
+                this.updateAuthUI();
+            }
+        },
+
+        toggleAuth(checked) {
+            if (checked) {
+                // ON으로 전환 시도 -> 로그인 필요
+                this.login();
+            } else {
+                // OFF로 전환 -> 로그아웃
+                this.logout();
+            }
+        },
+
+        login() {
+            // 로그인 시도 표시 후 리다이렉트
+            sessionStorage.setItem('serverModeLoginAttempt', 'true');
+            window.location.href = '/api/auth/login';
+        },
+
+        logout() {
+            this.enabled = false;
+            this.authenticated = false;
+            this.updateAuthUI();
+            fetch('/api/auth/logout', { credentials: 'include' })
+                .then(() => window.location.reload());
+        },
+
+        // API 프록시 호출 (로그인 필요)
+        async proxyFetch(url, options = {}) {
+            if (!this.enabled || !this.authenticated) {
+                throw new Error('Login required for this feature');
+            }
+
+            const response = await fetch('/api/proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ url, options })
+            });
+
+            return response.json();
+        },
+
+        // 코드 실행 (로그인 필요)
+        async execute(code, language) {
+            if (!this.enabled || !this.authenticated) {
+                throw new Error('Login required for this feature');
+            }
+
+            const response = await fetch('/api/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ code, language })
+            });
+
+            return response.json();
+        }
+    };
+
+    // window에 노출
+    window.serverMode = serverMode;
+
     // Dynamic Library Loader
     const libraryLoader = {
         // Library definitions with URLs and check functions
@@ -2388,10 +2509,17 @@ https://example.com:443"></textarea>
                             </div>
                             <div class="flex gap-10">
                                 <button class="btn btn-secondary" onclick="pages.encrypt.clearCert()">Clear</button>
+                                <button class="btn btn-primary" id="fetch-cert-btn" style="display: none;" onclick="pages.encrypt.fetchCertFromUrl()">
+                                    <span id="fetch-cert-text">Fetch Certificate</span>
+                                </button>
                             </div>
                         </div>
 
                         <div id="cert-error" class="message message-error" style="display: none;"></div>
+
+                        <div id="cert-auth-hint" class="message" style="display: none; background-color: var(--primary-color); color: white; opacity: 0.9;">
+                            Login to use the "Fetch Certificate" feature for automatic certificate retrieval.
+                        </div>
 
                         <div id="cert-commands" class="card" style="display: none;">
                             <h3 class="card-title">Commands to Fetch Certificate</h3>
@@ -2603,6 +2731,7 @@ https://example.com:443"></textarea>
                 const commandsEl = document.getElementById('cert-commands');
                 const resultsEl = document.getElementById('cert-results');
                 const errorEl = document.getElementById('cert-error');
+                const fetchBtn = document.getElementById('fetch-cert-btn');
 
                 const inputType = this.detectInputType(input);
 
@@ -2620,14 +2749,33 @@ https://example.com:443"></textarea>
 
                 errorEl.style.display = 'none';
 
+                // Fetch 버튼: Authorized 상태이고 URL 입력 시에만 표시
+                const authHint = document.getElementById('cert-auth-hint');
+                if (fetchBtn) {
+                    if (inputType === 'url' && window.serverMode && window.serverMode.authenticated) {
+                        fetchBtn.style.display = 'inline-flex';
+                        if (authHint) authHint.style.display = 'none';
+                    } else {
+                        fetchBtn.style.display = 'none';
+                        // URL 입력인데 미인증 상태면 힌트 표시
+                        if (authHint && inputType === 'url') {
+                            authHint.style.display = 'block';
+                        } else if (authHint) {
+                            authHint.style.display = 'none';
+                        }
+                    }
+                }
+
                 if (inputType === 'url') {
                     this.updateCertCommands();
                     resultsEl.style.display = 'none';
                 } else if (inputType === 'pem') {
                     commandsEl.style.display = 'none';
+                    if (authHint) authHint.style.display = 'none';
                     this.parseCert();
                 } else {
                     commandsEl.style.display = 'none';
+                    if (authHint) authHint.style.display = 'none';
                     resultsEl.style.display = 'none';
                 }
             },
@@ -2694,6 +2842,59 @@ $tcpClient.Close()`;
                 const el = document.getElementById(mapping[cmd]);
                 if (el) {
                     utils.copyToClipboard(el.textContent);
+                }
+            },
+
+            async fetchCertFromUrl() {
+                const input = document.getElementById('cert-input').value.trim();
+                const fetchBtn = document.getElementById('fetch-cert-btn');
+                const fetchText = document.getElementById('fetch-cert-text');
+                const errorEl = document.getElementById('cert-error');
+
+                if (!input) return;
+
+                // URL 파싱
+                let host = input.replace(/^https?:\/\//, '');
+                let port = 443;
+
+                const portMatch = host.match(/:(\d+)/);
+                if (portMatch) {
+                    port = parseInt(portMatch[1]);
+                    host = host.replace(/:(\d+)/, '');
+                }
+                host = host.split('/')[0];
+
+                // 로딩 상태 표시
+                fetchBtn.disabled = true;
+                fetchText.textContent = 'Fetching...';
+                errorEl.style.display = 'none';
+
+                try {
+                    const response = await fetch('/api/cert/fetch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ host, port })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.error || 'Failed to fetch certificate');
+                    }
+
+                    // 가져온 인증서를 입력창에 표시하고 파싱
+                    document.getElementById('cert-input').value = data.pem;
+                    utils.saveToStorage('cert-input', data.pem);
+                    this.processCertInput();
+                    utils.showToast('Certificate fetched successfully');
+
+                } catch (e) {
+                    errorEl.textContent = `Error: ${e.message}`;
+                    errorEl.style.display = 'block';
+                } finally {
+                    fetchBtn.disabled = false;
+                    fetchText.textContent = 'Fetch Certificate';
                 }
             },
 
@@ -4303,7 +4504,10 @@ $tcpClient.Close()`;
                         <div class="flex gap-10 mb-10">
                             <button class="btn btn-small btn-secondary" onclick="pages.downloader.selectAll()">Select All</button>
                             <button class="btn btn-small btn-secondary" onclick="pages.downloader.deselectAll()">Deselect All</button>
-                            <button class="btn btn-small btn-success" onclick="pages.downloader.downloadSelected()">Download</button>
+                            <button class="btn btn-small btn-success dl-auth-required" onclick="pages.downloader.downloadSelected()" style="display: none;">Download Selected</button>
+                        </div>
+                        <div id="dl-auth-hint" class="message" style="display: none; background-color: var(--primary-color); color: white; opacity: 0.9; margin-bottom: 15px;">
+                            Login to enable download functionality.
                         </div>
                         <div id="dl-items-list" class="dl-items-list"></div>
                     </div>
@@ -4500,6 +4704,11 @@ $tcpClient.Close()`;
             },
 
             async downloadAll() {
+                if (!window.serverMode || !window.serverMode.authenticated) {
+                    utils.showToast('Login required for download');
+                    return;
+                }
+
                 // If no items found yet, find them first
                 if (this.foundItems.length === 0) {
                     const result = await this.parseContent();
@@ -4754,6 +4963,7 @@ $tcpClient.Close()`;
 
             displayFoundItems() {
                 const listEl = document.getElementById('dl-items-list');
+                const isAuthorized = window.serverMode && window.serverMode.authenticated;
 
                 listEl.innerHTML = this.foundItems.map((item, idx) => `
                     <div class="dl-item">
@@ -4765,8 +4975,8 @@ $tcpClient.Close()`;
                                 <span class="dl-item-type">${item.type}</span>
                             </label>
                             <div class="dl-item-actions">
-                                <button class="btn btn-small btn-secondary" onclick="pages.downloader.downloadSingle(${idx})">Download</button>
-                                <button class="btn btn-small btn-secondary" onclick="pages.downloader.copyUrl(${idx})">Copy</button>
+                                ${isAuthorized ? `<button class="btn btn-small btn-secondary" onclick="pages.downloader.downloadSingle(${idx})">Download</button>` : ''}
+                                <button class="btn btn-small btn-secondary" onclick="pages.downloader.copyUrl(${idx})">Copy URL</button>
                             </div>
                         </div>
                         ${item.type === 'image' ? `
@@ -4794,6 +5004,18 @@ $tcpClient.Close()`;
                 `).join('');
 
                 document.getElementById('dl-results-card').style.display = 'block';
+
+                // Show/hide auth-dependent elements
+                const authHint = document.getElementById('dl-auth-hint');
+                const authButtons = document.querySelectorAll('.dl-auth-required');
+
+                if (isAuthorized) {
+                    if (authHint) authHint.style.display = 'none';
+                    authButtons.forEach(btn => btn.style.display = 'inline-flex');
+                } else {
+                    if (authHint) authHint.style.display = 'block';
+                    authButtons.forEach(btn => btn.style.display = 'none');
+                }
             },
 
             copyUrl(idx) {
@@ -4806,7 +5028,24 @@ $tcpClient.Close()`;
             downloadSingle(idx) {
                 const item = this.foundItems[idx];
                 if (!item) return;
-                window.open(item.url, '_blank');
+
+                if (!window.serverMode || !window.serverMode.authenticated) {
+                    utils.showToast('Login required for download');
+                    return;
+                }
+
+                // Backend 프록시를 통해 다운로드
+                const userAgent = document.getElementById('dl-user-agent')?.value || '';
+                const downloadUrl = `/api/download?url=${encodeURIComponent(item.url)}`;
+
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = item.name;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                utils.showToast(`Downloading: ${item.name}`);
             },
 
             selectAll() {
@@ -4817,11 +5056,16 @@ $tcpClient.Close()`;
                 document.querySelectorAll('.dl-item-check').forEach(cb => cb.checked = false);
             },
 
-            downloadSelected() {
+            async downloadSelected() {
+                if (!window.serverMode || !window.serverMode.authenticated) {
+                    utils.showToast('Login required for download');
+                    return;
+                }
+
                 const selected = [];
                 document.querySelectorAll('.dl-item-check:checked').forEach(cb => {
                     const idx = parseInt(cb.dataset.index);
-                    selected.push(this.foundItems[idx]);
+                    selected.push({ ...this.foundItems[idx], idx });
                 });
 
                 if (selected.length === 0) {
@@ -4829,11 +5073,27 @@ $tcpClient.Close()`;
                     return;
                 }
 
-                selected.forEach(item => {
-                    window.open(item.url, '_blank');
-                });
+                utils.showToast(`Starting download of ${selected.length} item(s)...`);
 
-                utils.showToast(`Opening ${selected.length} item(s) in new tabs`);
+                // 순차적으로 다운로드 (브라우저 제한 고려)
+                for (let i = 0; i < selected.length; i++) {
+                    const item = selected[i];
+                    const downloadUrl = `/api/download?url=${encodeURIComponent(item.url)}`;
+
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = item.name;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    // 다음 다운로드 전 짧은 대기
+                    if (i < selected.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                }
+
+                utils.showToast(`Downloaded ${selected.length} item(s)`);
             },
 
             parseGithubUrl(url) {
@@ -5192,9 +5452,10 @@ $tcpClient.Close()`;
                             </div>
                         </div>
                         <div class="flex gap-10 mt-20">
-                            <button class="btn btn-primary" onclick="pages.network.lookup()">Lookup</button>
+                            <button class="btn btn-primary network-auth-btn" id="dns-lookup-btn" onclick="pages.network.lookup()" style="display: none;">Lookup</button>
                             <button class="btn btn-secondary" onclick="pages.network.clear()">Clear</button>
                         </div>
+                        <div id="dns-auth-hint" class="mt-10" style="font-size: 0.85rem; color: var(--text-muted);"></div>
                     </div>
 
                     <div id="dns-error" class="message message-error" style="display: none;"></div>
@@ -5314,10 +5575,25 @@ $tcpClient.Close()`;
                 customUrl.addEventListener('input', () => utils.saveToStorage('dns-custom-url', customUrl.value));
 
                 input.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') this.lookup();
+                    if (e.key === 'Enter' && window.serverMode?.authenticated) this.lookup();
                 });
 
                 this.updateCommands();
+                this.updateDnsAuthUI();
+            },
+
+            updateDnsAuthUI() {
+                const isAuthorized = window.serverMode && window.serverMode.authenticated;
+                const lookupBtn = document.getElementById('dns-lookup-btn');
+                const authHint = document.getElementById('dns-auth-hint');
+
+                if (isAuthorized) {
+                    if (lookupBtn) lookupBtn.style.display = 'inline-flex';
+                    if (authHint) authHint.innerHTML = '✓ <span style="color: var(--success-color);">DNS lookup enabled</span>';
+                } else {
+                    if (lookupBtn) lookupBtn.style.display = 'none';
+                    if (authHint) authHint.innerHTML = '<span style="color: var(--primary-color);">Login</span> to perform DNS lookups.';
+                }
             },
 
             switchTab(tab) {
@@ -6093,9 +6369,10 @@ $tcpClient.Close()`;
                         </div>
                         <div class="flex gap-10 mt-20">
                             <button class="btn btn-primary" onclick="pages.network.generateCurl()">Generate Curl</button>
-                            <button class="btn btn-success" onclick="pages.network.executeRequest()">Execute Request</button>
+                            <button class="btn btn-success network-auth-btn" id="execute-request-btn" onclick="pages.network.executeRequest()" style="display: none;">Execute Request</button>
                             <button class="btn btn-secondary" onclick="pages.network.clearCurl()">Clear</button>
                         </div>
+                        <div id="curl-auth-hint" class="mt-10" style="font-size: 0.85rem; color: var(--text-muted);"></div>
                     </div>
                     <div class="card" id="curl-result-card" style="display: none;">
                         <h3 class="card-title">Generated Curl Commands</h3>
@@ -6140,6 +6417,19 @@ $tcpClient.Close()`;
                 method.addEventListener('change', () => utils.saveToStorage('curl-method', method.value));
                 url.addEventListener('input', () => utils.saveToStorage('curl-url', url.value));
                 body.addEventListener('input', () => utils.saveToStorage('curl-body', body.value));
+
+                // Auth 상태에 따른 UI 표시
+                const authHint = document.getElementById('curl-auth-hint');
+                const executeBtn = document.getElementById('execute-request-btn');
+                const isAuthorized = window.serverMode && window.serverMode.authenticated;
+
+                if (isAuthorized) {
+                    if (executeBtn) executeBtn.style.display = 'inline-flex';
+                    if (authHint) authHint.innerHTML = '✓ <span style="color: var(--success-color);">Server proxy enabled</span> - CORS restrictions bypassed';
+                } else {
+                    if (executeBtn) executeBtn.style.display = 'none';
+                    if (authHint) authHint.innerHTML = '<span style="color: var(--primary-color);">Login</span> to execute requests via server proxy.';
+                }
             },
 
             addHeader() {
@@ -6304,36 +6594,79 @@ $tcpClient.Close()`;
                 responseEl.textContent = '';
                 responseCard.style.display = 'block';
 
-                try {
-                    const options = {
-                        method,
-                        headers,
-                        mode: 'cors'
-                    };
+                // Authorized 상태면 Backend 프록시 사용 (CORS 우회)
+                const isAuthorized = window.serverMode && window.serverMode.authenticated;
 
-                    if (body && ['POST', 'PUT', 'PATCH'].includes(method)) {
-                        options.body = body;
-                        if (!headers['Content-Type']) {
-                            options.headers['Content-Type'] = 'application/json';
+                try {
+                    let responseStatus, responseStatusText, responseBody, latency;
+
+                    if (isAuthorized) {
+                        // Backend API 사용
+                        const apiResponse = await fetch('/api/network/http', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({
+                                url,
+                                method,
+                                headers,
+                                body: body || undefined
+                            })
+                        });
+
+                        const data = await apiResponse.json();
+
+                        if (!apiResponse.ok || !data.success) {
+                            throw new Error(data.error || 'Request failed');
                         }
+
+                        responseStatus = data.status;
+                        responseStatusText = data.statusText;
+                        responseBody = data.body;
+                        latency = data.latency;
+                    } else {
+                        // 직접 fetch (CORS 제한 있음)
+                        const options = {
+                            method,
+                            headers,
+                            mode: 'cors'
+                        };
+
+                        if (body && ['POST', 'PUT', 'PATCH'].includes(method)) {
+                            options.body = body;
+                            if (!headers['Content-Type']) {
+                                options.headers['Content-Type'] = 'application/json';
+                            }
+                        }
+
+                        const startTime = Date.now();
+                        const response = await fetch(url, options);
+                        latency = Date.now() - startTime;
+
+                        responseStatus = response.status;
+                        responseStatusText = response.statusText;
+                        responseBody = await response.text();
                     }
 
-                    const response = await fetch(url, options);
-                    const text = await response.text();
-
-                    statusEl.textContent = `${response.status} ${response.statusText}`;
-                    statusEl.style.color = response.ok ? 'var(--success-color)' : 'var(--error-color)';
+                    const isOk = responseStatus >= 200 && responseStatus < 300;
+                    statusEl.innerHTML = `${responseStatus} ${responseStatusText}` +
+                        (latency ? ` <span style="color: var(--text-muted);">(${latency}ms)</span>` : '');
+                    statusEl.style.color = isOk ? 'var(--success-color)' : 'var(--error-color)';
 
                     try {
-                        const json = JSON.parse(text);
+                        const json = JSON.parse(responseBody);
                         responseEl.textContent = JSON.stringify(json, null, 2);
                     } catch {
-                        responseEl.textContent = text;
+                        responseEl.textContent = responseBody;
                     }
                 } catch (e) {
                     statusEl.textContent = 'Error';
                     statusEl.style.color = 'var(--error-color)';
-                    responseEl.textContent = e.message + '\n\nNote: CORS restrictions may prevent requests to external APIs from the browser.';
+                    let errorMsg = e.message;
+                    if (!isAuthorized) {
+                        errorMsg += '\n\nTip: Login to bypass CORS restrictions using server proxy.';
+                    }
+                    responseEl.textContent = errorMsg;
                 }
             },
 
@@ -6478,6 +6811,9 @@ $tcpClient.Close()`;
 
     // Initialize Theme Manager
     themeManager.init();
+
+    // Initialize Server Mode
+    serverMode.init();
 
     // Initialize Router
     router.init();

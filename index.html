@@ -89,6 +89,18 @@
             </li>
         </ul>
         <div class="sidebar-footer">
+            <!-- Auth Section -->
+            <div class="auth-section" id="authSection">
+                <div class="auth-status" id="authStatus">
+                    <span class="auth-label" id="authLabel">Guest</span>
+                </div>
+                <label class="auth-toggle">
+                    <input type="checkbox" id="authToggle" onchange="serverMode.toggleAuth(this.checked)">
+                    <span class="auth-toggle-slider"></span>
+                </label>
+            </div>
+
+            <!-- Theme Toggle -->
             <div class="theme-toggle" id="themeToggle">
                 <span class="theme-toggle-icon" id="themeIcon">🌙</span>
                 <span class="theme-toggle-label" id="themeLabel">Dark</span>
