@@ -2,12 +2,12 @@
 
 개발자를 위한 다양한 유틸리티 도구를 제공하는 웹 애플리케이션입니다. 두 가지 모드로 실행 가능합니다:
 
-- **Guest 모드**: 순수 클라이언트 사이드로 동작, 빌드 시스템 없이 바로 사용
-- **Authorized 모드**: nginx + Node.js 백엔드 서버 배포, 추가 기능 사용 가능
+- **Frontend-only 모드**: 순수 클라이언트 사이드로 동작, 빌드 시스템 없이 바로 사용
+- **Server 모드**: Node.js 백엔드 서버 배포, 추가 기능 사용 가능
 
 ## 특징
 
-- **오프라인 지원**: 대부분의 기능이 오프라인에서도 동작 (Guest 모드)
+- **오프라인 지원**: 대부분의 기능이 오프라인에서도 동작 (Frontend-only 모드)
 - **빌드 불필요**: HTML 파일을 직접 열거나 정적 서버로 실행
 - **다크/라이트 테마**: 사용자 선호에 따른 테마 전환
 - **상태 저장**: localStorage를 통한 입력 값 자동 저장
@@ -31,28 +31,28 @@
 | Converter | Radix | 진수 변환 (2, 8, 10, 16진수) |
 | | Byte | 데이터 크기 변환 (Bit ~ TB) |
 | Encrypt | Hash | 해시 생성 (MD5, SHA-1, SHA-256, SHA-512) |
-| | Certificate | PEM 파싱, 인증서 조회 명령어, **URL 조회 (Auth)** |
+| | Certificate | PEM 파싱, 인증서 조회 명령어, **URL 조회 (Server)** |
 | Calculator | IP | IP/서브넷 계산 (CIDR, 네트워크, 브로드캐스트) |
 | Generator | UUID | UUID v4 생성 (다중 생성 지원) |
 | Command | Windows | Windows 시스템 명령어 모음 |
-| Downloader | HTML | 미디어 URL 추출, **파일 다운로드 (Auth)** |
+| Downloader | HTML | 미디어 URL 추출, **파일 다운로드 (Server)** |
 | | GitHub | GitHub 저장소 다운로드 링크 생성 |
-| Network | IP | 공인 IP 조회 명령어, **IP 조회 (Auth)** |
-| | DNS | DNS 조회 명령어, **Lookup 실행 (Auth)** |
-| | HTTP | **HTTP 요청 실행 (Auth)** |
-| | CURL | cURL 명령어 생성, **요청 실행 (Auth)** |
+| Network | IP | 공인 IP 조회 명령어, **IP 조회 (Server)** |
+| | DNS | DNS 조회 명령어, Lookup 실행 (DoH) |
+| | HTTP | HTTP 요청 실행 (CORS 제한, **Server**: CORS 우회) |
+| | CURL | cURL 명령어 생성, 요청 실행 (CORS 제한, **Server**: CORS 우회) |
 | | Port Scan | 포트 스캔 명령어 생성 (nmap, netcat 등) |
 
-> **(Auth)** 표시된 기능은 Authorized 모드에서만 사용 가능
+> **(Server)** 표시된 기능은 Server 모드에서만 사용 가능
 
 ## 실행 방법
 
-### 방법 1: Guest 모드 (직접 열기)
+### 방법 1: Frontend-only 모드 (직접 열기)
 `index.html` 파일을 브라우저에서 직접 열기
 
 > 일부 기능(ES 모듈이 필요한 외부 라이브러리)은 로컬 서버 사용 시 더 잘 동작합니다.
 
-### 방법 2: Guest 모드 (로컬 서버)
+### 방법 2: Frontend-only 모드 (로컬 서버)
 ```bash
 # Python 3
 python -m http.server 8080
@@ -65,18 +65,23 @@ php -S localhost:8080
 ```
 브라우저에서 `http://localhost:8080` 접속
 
-### 방법 3: Authorized 모드 (서버 배포)
+### 방법 3: Server 모드 (서버 배포)
 Node.js 서버 배포로 추가 기능을 사용할 수 있습니다.
 
 ```bash
-# 서버 실행
-npm install && npm start  # http://localhost:3000
+# 서버 실행 (기본 포트 3000)
+npm install && npm start
+
+# 포트 지정
+npm start -- --port 8080
+npm start -- -p 8080
+PORT=8080 npm start
 
 # nginx 프록시 (선택사항)
 # nginx/nginx.conf 참고
 ```
 
-로그인 후 추가 기능을 사용할 수 있습니다:
+Server 모드에서 추가로 사용할 수 있는 기능:
 - SSL 인증서 URL 조회
 - 파일 다운로드 (CORS 우회)
 - DNS Lookup 실행
@@ -107,10 +112,9 @@ online-tools/
 - **라우팅**: Hash-based SPA 라우팅
 - **저장소**: localStorage, sessionStorage
 
-### 백엔드 (Authorized 모드)
-- **웹서버**: nginx (Basic Auth, Reverse Proxy)
+### 백엔드 (Server 모드)
 - **API 서버**: Node.js + Express
-- **보안**: nginx Basic Auth (.htpasswd)
+- **웹서버** (선택): nginx (Reverse Proxy)
 
 ### 백엔드 API
 | 엔드포인트 | 메서드 | 설명 |
@@ -144,20 +148,21 @@ online-tools/
 - [node-fetch](https://github.com/node-fetch/node-fetch) - HTTP 클라이언트
 - [vm2](https://github.com/patriksimek/vm2) - JavaScript 샌드박스
 
-## Guest vs Authorized 기능 비교
+## Frontend-only vs Server 기능 비교
 
-| 기능 | Guest | Authorized |
-|------|:-----:|:----------:|
+| 기능 | Frontend-only | Server |
+|------|:-------------:|:------:|
 | 모든 클라이언트 도구 | ✅ | ✅ |
 | Encrypt/Cert: PEM 파싱 | ✅ | ✅ |
 | Encrypt/Cert: URL에서 인증서 조회 | ❌ | ✅ |
-| Downloader/HTML: 링크 추출 | ✅ | ✅ |
+| Downloader/HTML: 링크 추출 (HTML 입력) | ✅ | ✅ |
+| Downloader/HTML: URL에서 가져오기 | ❌ | ✅ |
 | Downloader/HTML: 파일 다운로드 | ❌ | ✅ |
-| Network/Curl: 명령어 생성 | ✅ | ✅ |
-| Network/Curl: 요청 실행 | ❌ | ✅ |
 | Network/DNS: 명령어 생성 | ✅ | ✅ |
-| Network/DNS: Lookup 실행 | ❌ | ✅ |
-| Network/HTTP: 요청 실행 | ❌ | ✅ |
+| Network/DNS: Lookup 실행 | ✅ (DoH) | ✅ |
+| Network/HTTP: 요청 실행 | ⚠️ CORS 제한 | ✅ CORS 우회 |
+| Network/CURL: 명령어 생성 | ✅ | ✅ |
+| Network/CURL: 요청 실행 | ⚠️ CORS 제한 | ✅ CORS 우회 |
 | Network/Port Scan: 명령어 생성 | ✅ | ✅ |
 
 ## 브라우저 지원

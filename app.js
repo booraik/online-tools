@@ -2825,7 +2825,9 @@ https://example.com:443"></textarea>
                 errorEl.style.display = 'none';
 
                 if (inputType === 'url') {
-                    fetchBtn.style.display = 'inline-flex';
+                    // Fetch 버튼은 Server 모드에서만 표시
+                    const isServerMode = window.serverMode && window.serverMode.enabled;
+                    fetchBtn.style.display = isServerMode ? 'inline-flex' : 'none';
                     this.updateCertCommands();
                     resultsEl.style.display = 'none';
                 } else if (inputType === 'pem') {
@@ -4178,7 +4180,8 @@ $tcpClient.Close()`;
                     ['compare-original', 'compare-modified']
                 );
                 this.runCompare();
-            }
+            },
+
         },
 
         // Calculator Page (IP Calculator)
@@ -4878,7 +4881,14 @@ $tcpClient.Close()`;
                     html = htmlContent;
                     this.showStatus(`Using provided HTML content (${html.length.toLocaleString()} characters)`);
                 } else {
-                    // Fetch HTML from URL
+                    // Fetch HTML from URL - Server 모드 필요
+                    const isServerMode = window.serverMode && window.serverMode.enabled;
+                    if (!isServerMode) {
+                        this.showError('URL에서 가져오기는 Server 모드에서만 가능합니다. HTML Content를 직접 입력하거나 Server 모드로 실행하세요.');
+                        this.stopStatusSpinner();
+                        return false;
+                    }
+
                     this.showStatus('Fetching page content...');
                     try {
                         const headers = {};
@@ -5238,18 +5248,25 @@ $tcpClient.Close()`;
                 const item = this.foundItems[idx];
                 if (!item) return;
 
-                // Backend 프록시를 통해 다운로드
-                const userAgent = document.getElementById('dl-user-agent')?.value || '';
-                const downloadUrl = `/api/download?url=${encodeURIComponent(item.url)}`;
+                const isServerMode = window.serverMode && window.serverMode.enabled;
 
-                const link = document.createElement('a');
-                link.href = downloadUrl;
-                link.download = item.name;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                if (isServerMode) {
+                    // Backend 프록시를 통해 다운로드 (CORS 우회)
+                    const downloadUrl = `/api/download?url=${encodeURIComponent(item.url)}`;
 
-                utils.showToast(`Downloading: ${item.name}`);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = item.name;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    utils.showToast(`Downloading: ${item.name}`);
+                } else {
+                    // Frontend-only: 직접 URL 열기 (CORS 제한 있을 수 있음)
+                    window.open(item.url, '_blank');
+                    utils.showToast(`Opening: ${item.name} (새 탭에서 직접 저장하세요)`);
+                }
             },
 
             selectAll() {
@@ -5272,27 +5289,45 @@ $tcpClient.Close()`;
                     return;
                 }
 
-                utils.showToast(`Starting download of ${selected.length} item(s)...`);
+                const isServerMode = window.serverMode && window.serverMode.enabled;
 
-                // 순차적으로 다운로드 (브라우저 제한 고려)
-                for (let i = 0; i < selected.length; i++) {
-                    const item = selected[i];
-                    const downloadUrl = `/api/download?url=${encodeURIComponent(item.url)}`;
+                if (isServerMode) {
+                    utils.showToast(`Starting download of ${selected.length} item(s)...`);
 
-                    const link = document.createElement('a');
-                    link.href = downloadUrl;
-                    link.download = item.name;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
+                    // 순차적으로 다운로드 (브라우저 제한 고려)
+                    for (let i = 0; i < selected.length; i++) {
+                        const item = selected[i];
+                        const downloadUrl = `/api/download?url=${encodeURIComponent(item.url)}`;
 
-                    // 다음 다운로드 전 짧은 대기
-                    if (i < selected.length - 1) {
-                        await new Promise(resolve => setTimeout(resolve, 500));
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        link.download = item.name;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+
+                        // 다음 다운로드 전 짧은 대기
+                        if (i < selected.length - 1) {
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
                     }
-                }
 
-                utils.showToast(`Downloaded ${selected.length} item(s)`);
+                    utils.showToast(`Downloaded ${selected.length} item(s)`);
+                } else {
+                    // Frontend-only: 직접 URL 열기 (CORS 제한 있을 수 있음)
+                    utils.showToast(`Opening ${selected.length} item(s) in new tabs...`);
+
+                    for (let i = 0; i < selected.length; i++) {
+                        const item = selected[i];
+                        window.open(item.url, '_blank');
+
+                        if (i < selected.length - 1) {
+                            await new Promise(resolve => setTimeout(resolve, 300));
+                        }
+                    }
+
+                    utils.showToast(`새 탭에서 직접 저장하세요 (Server 모드에서는 직접 다운로드 가능)`);
+                }
             },
 
             parseGithubUrl(url) {

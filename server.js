@@ -318,7 +318,23 @@ app.post('/api/execute', (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3000;
+// 포트 설정: --port 또는 -p 옵션, 환경변수, 기본값 순서
+function getPort() {
+    const args = process.argv.slice(2);
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--port' || args[i] === '-p') {
+            const port = parseInt(args[i + 1], 10);
+            if (!isNaN(port)) return port;
+        }
+        if (args[i].startsWith('--port=')) {
+            const port = parseInt(args[i].split('=')[1], 10);
+            if (!isNaN(port)) return port;
+        }
+    }
+    return parseInt(process.env.PORT, 10) || 3000;
+}
+
+const PORT = getPort();
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
