@@ -12,7 +12,7 @@
 - **다크/라이트 테마**: 사용자 선호에 따른 테마 전환
 - **상태 저장**: localStorage를 통한 입력 값 자동 저장
 - **반응형 디자인**: 모바일 및 데스크톱 지원
-- **서버 기능**: 인증 후 CORS 우회, SSL 인증서 조회, DNS 조회 등 추가 기능
+- **서버 기능**: CORS 우회, SSL 인증서 조회, DNS 조회 등 추가 기능
 
 ## 도구 목록
 
@@ -21,27 +21,37 @@
 | Viewer | Markdown | Markdown 문서 실시간 렌더링 |
 | | Textile | Textile 문서 실시간 렌더링 |
 | String | Counter | 문자 수, 단어 수, 줄 수, 바이트 크기 계산 |
-| | Search/Replace | 텍스트 검색 및 치환 (정규식 지원) |
+| | Replace | 텍스트 검색 및 치환 (정규식 지원), 매치 위치 표시 |
 | | Compare | 두 텍스트 비교 (diff) |
 | Formatter | JSON | JSON 정렬 및 포맷팅, 오류 위치 표시 |
-| | YAML | YAML 포맷팅 |
+| | YAML | YAML 포맷팅 (들여쓰기 검증 포함) |
+| | XML | XML 포맷팅 |
+| | SQL | SQL 포맷팅 |
+| | HTML | HTML 포맷팅 |
 | | JavaScript | JavaScript 코드 정렬 |
 | Encoding | Base64 | Base64 인코딩/디코딩 |
 | | URL | URL 인코딩/디코딩 |
-| Converter | Radix | 진수 변환 (2, 8, 10, 16진수) |
-| | Byte | 데이터 크기 변환 (Bit ~ TB) |
+| | Hex | Hex 인코딩/디코딩 |
+| | ASCII | ASCII 코드 변환 |
+| | Unicode | Unicode 변환 |
+| Converter | Timestamp | Unix 타임스탬프 변환 |
+| | Timezone | 시간대 변환 |
+| | Radix | 진수 변환 (2, 8, 10, 16진수) |
+| | DataSize | 데이터 크기 변환 (Bit ~ TB) |
 | Encrypt | Hash | 해시 생성 (MD5, SHA-1, SHA-256, SHA-512) |
 | | Certificate | PEM 파싱, 인증서 조회 명령어, **URL 조회 (Server)** |
-| Calculator | IP | IP/서브넷 계산 (CIDR, 네트워크, 브로드캐스트) |
+| Calculator | String | 문자열 통계 계산 |
+| | IP | IP/서브넷 계산 (CIDR, 네트워크, 브로드캐스트) |
 | Generator | UUID | UUID v4 생성 (다중 생성 지원) |
+| | Password | 비밀번호 생성 |
+| | Lorem | Lorem Ipsum 텍스트 생성 |
 | Command | Windows | Windows 시스템 명령어 모음 |
-| Downloader | HTML | 미디어 URL 추출, **파일 다운로드 (Server)** |
-| | GitHub | GitHub 저장소 다운로드 링크 생성 |
-| Network | IP | 공인 IP 조회 명령어, **IP 조회 (Server)** |
-| | DNS | DNS 조회 명령어, Lookup 실행 (DoH) |
-| | HTTP | HTTP 요청 실행 (CORS 제한, **Server**: CORS 우회) |
-| | CURL | cURL 명령어 생성, 요청 실행 (CORS 제한, **Server**: CORS 우회) |
+| | Curl | cURL 명령어 레퍼런스 |
+| Downloader | WebScraping | 미디어 URL 추출 (이미지, 비디오, 오디오, PDF, 커스텀 확장자), **파일 다운로드 (Server)** |
+| | GitHub | GitHub 저장소 다운로드 (Branches, Tags, Releases 자동 로드) |
+| Network | DNS | DNS 조회 명령어 생성, **Lookup 실행 (Server)** |
 | | Port Scan | 포트 스캔 명령어 생성 (nmap, netcat 등) |
+| | Curl | cURL 명령어 생성, **요청 실행 (Server)** |
 
 > **(Server)** 표시된 기능은 Server 모드에서만 사용 가능
 
@@ -85,7 +95,6 @@ Server 모드에서 추가로 사용할 수 있는 기능:
 - SSL 인증서 URL 조회
 - 파일 다운로드 (CORS 우회)
 - DNS Lookup 실행
-- HTTP 요청 실행
 - cURL 요청 실행
 
 ### 방법 4: Docker (컨테이너 배포)
@@ -109,8 +118,8 @@ docker-compose down
 
 ```
 online-tools/
-├── index.html          # 메인 HTML (사이드바 네비게이션, 인증 UI)
-├── app.js              # 전체 애플리케이션 로직 (IIFE, serverMode 포함)
+├── index.html          # 메인 HTML (사이드바 네비게이션)
+├── app.js              # 전체 애플리케이션 로직 (IIFE)
 ├── styles.css          # 스타일시트 (다크/라이트 테마)
 ├── server.js           # Express 서버 (정적 파일 + API)
 ├── package.json        # Node.js 의존성
@@ -139,15 +148,11 @@ online-tools/
 ### 백엔드 API
 | 엔드포인트 | 메서드 | 설명 |
 |-----------|--------|------|
-| `/api/auth/check` | GET | 인증 상태 확인 |
-| `/api/auth/login` | GET | Basic Auth 트리거 |
-| `/api/auth/logout` | GET | 로그아웃 (401 반환) |
 | `/api/cert/fetch` | POST | SSL 인증서 조회 |
 | `/api/download` | GET | 파일 다운로드 프록시 |
 | `/api/network/dns` | POST | DNS 조회 |
 | `/api/network/http` | POST | HTTP 요청 프록시 |
 | `/api/proxy` | POST | 범용 API 프록시 |
-| `/api/execute` | POST | JavaScript 코드 실행 (샌드박스) |
 
 ### 프론트엔드 라이브러리 (CDN)
 라이브러리는 필요 시 동적으로 로드되며, 로드 실패 시 내장 기능으로 대체됩니다.
@@ -160,7 +165,7 @@ online-tools/
 - [sql-formatter](https://github.com/sql-formatter-org/sql-formatter) - SQL 포맷팅
 - [crypto-js](https://github.com/brix/crypto-js) - 암호화 함수
 - [textile-js](https://github.com/borgar/textile-js) - Textile 파싱
-- [js-beautify](https://github.com/beautifier/js-beautify) - JavaScript 포맷팅
+- [js-beautify](https://github.com/beautifier/js-beautify) - JavaScript/HTML 포맷팅
 - [node-forge](https://github.com/digitalbazaar/forge) - 인증서 파싱
 
 ### 백엔드 라이브러리 (npm)
@@ -175,14 +180,14 @@ online-tools/
 | 모든 클라이언트 도구 | ✅ | ✅ |
 | Encrypt/Cert: PEM 파싱 | ✅ | ✅ |
 | Encrypt/Cert: URL에서 인증서 조회 | ❌ | ✅ |
-| Downloader/HTML: 링크 추출 (HTML 입력) | ✅ | ✅ |
-| Downloader/HTML: URL에서 가져오기 | ❌ | ✅ |
-| Downloader/HTML: 파일 다운로드 | ❌ | ✅ |
+| Downloader/WebScraping: 링크 추출 (HTML 입력) | ✅ | ✅ |
+| Downloader/WebScraping: URL에서 가져오기 | ❌ | ✅ |
+| Downloader/WebScraping: 파일 다운로드 | 새 탭에서 열기 | ✅ 직접 다운로드 |
+| Downloader/GitHub: 저장소 다운로드 | ✅ | ✅ |
 | Network/DNS: 명령어 생성 | ✅ | ✅ |
-| Network/DNS: Lookup 실행 | ✅ (DoH) | ✅ |
-| Network/HTTP: 요청 실행 | ⚠️ CORS 제한 | ✅ CORS 우회 |
-| Network/CURL: 명령어 생성 | ✅ | ✅ |
-| Network/CURL: 요청 실행 | ⚠️ CORS 제한 | ✅ CORS 우회 |
+| Network/DNS: Lookup 실행 | ❌ | ✅ |
+| Network/Curl: 명령어 생성 | ✅ | ✅ |
+| Network/Curl: 요청 실행 | ❌ | ✅ |
 | Network/Port Scan: 명령어 생성 | ✅ | ✅ |
 
 ## 브라우저 지원

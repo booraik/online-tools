@@ -437,14 +437,82 @@
             return formatted.trim();
         },
 
-        // Simple YAML parser/formatter (basic support)
+        // Simple YAML parser/formatter with validation
         formatYaml(yaml) {
-            // Just return as-is with normalized indentation for basic YAML
-            return yaml.split('\n').map(line => {
+            const lines = yaml.split('\n');
+            const result = [];
+            const indentStack = [0];
+            let baseIndent = null;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const lineNum = i + 1;
+
+                // Skip empty lines
+                if (line.trim() === '') {
+                    result.push('');
+                    continue;
+                }
+
+                // Skip comment lines
+                if (line.trim().startsWith('#')) {
+                    result.push(line);
+                    continue;
+                }
+
+                // Check for tabs
+                if (line.includes('\t')) {
+                    throw new Error(`Line ${lineNum}: Tab characters are not allowed in YAML. Use spaces for indentation.`);
+                }
+
                 const trimmed = line.trimStart();
-                const indent = line.length - trimmed.length;
-                return ' '.repeat(indent) + trimmed;
-            }).join('\n');
+                const currentIndent = line.length - trimmed.length;
+
+                // Detect base indent unit from first indented line
+                if (baseIndent === null && currentIndent > 0) {
+                    baseIndent = currentIndent;
+                }
+
+                // Check indent consistency
+                if (baseIndent && currentIndent > 0 && currentIndent % baseIndent !== 0) {
+                    throw new Error(`Line ${lineNum}: Invalid indentation. Expected multiple of ${baseIndent} spaces, got ${currentIndent}.`);
+                }
+
+                // Check indent level changes
+                const lastIndent = indentStack[indentStack.length - 1];
+                if (currentIndent > lastIndent) {
+                    // Indent increased - should only increase by one level
+                    if (baseIndent && currentIndent - lastIndent > baseIndent) {
+                        throw new Error(`Line ${lineNum}: Indentation increased too much. Expected ${lastIndent + baseIndent} spaces, got ${currentIndent}.`);
+                    }
+                    indentStack.push(currentIndent);
+                } else if (currentIndent < lastIndent) {
+                    // Indent decreased - must match a previous level
+                    while (indentStack.length > 1 && indentStack[indentStack.length - 1] > currentIndent) {
+                        indentStack.pop();
+                    }
+                    if (indentStack[indentStack.length - 1] !== currentIndent) {
+                        throw new Error(`Line ${lineNum}: Invalid indentation level. Does not match any previous indent.`);
+                    }
+                }
+
+                // Basic key-value validation (not list item)
+                if (!trimmed.startsWith('-') && !trimmed.startsWith('#')) {
+                    // Check for colon in key-value pairs
+                    if (trimmed.includes(':')) {
+                        const colonIndex = trimmed.indexOf(':');
+                        const beforeColon = trimmed.substring(0, colonIndex);
+                        // Key should not have unquoted special characters
+                        if (!/^["']/.test(beforeColon) && /[[\]{}>,|]/.test(beforeColon)) {
+                            throw new Error(`Line ${lineNum}: Invalid characters in key. Consider quoting the key.`);
+                        }
+                    }
+                }
+
+                result.push(' '.repeat(currentIndent) + trimmed);
+            }
+
+            return result.join('\n');
         },
 
         // Simple JavaScript formatter (basic support)
@@ -1705,7 +1773,6 @@ Use \`console.log()\` to print messages.
                             <div class="form-group">
                                 <div class="label-with-actions">
                                     <label class="form-label">Formatted Output</label>
-                                    <button class="btn btn-secondary btn-small" onclick="pages.formatter.copyOutput()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     <span class="indent-control">
                                         <label for="formatter-indent">Indent:</label>
                                         <select id="formatter-indent" onchange="pages.formatter.format()">
@@ -1717,6 +1784,9 @@ Use \`console.log()\` to print messages.
                                     </span>
                                 </div>
                                 <pre id="formatter-output" class="form-output"></pre>
+                                <div class="mt-10">
+                                    <button class="btn btn-secondary" onclick="pages.formatter.copyOutput()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3583,8 +3653,8 @@ $tcpClient.Close()`;
                             <div id="replacer-result" class="replacer-result-box"></div>
                         </div>
                         <div class="flex gap-10 mt-20" id="replace-actions" style="display: none;">
-                            <button class="btn btn-primary" onclick="pages.string.applyReplace()">Apply to Input</button>
                             <button class="btn btn-secondary" onclick="pages.string.copyReplaceResult()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                            <button class="btn btn-primary" onclick="pages.string.applyReplace()">Apply to Input</button>
                         </div>
                     </div>
                 `;
@@ -4613,6 +4683,12 @@ $tcpClient.Close()`;
                                     <input type="checkbox" id="dl-pdf" checked> PDF
                                 </label>
                             </div>
+                            <div class="mt-10">
+                                <label class="form-label">Custom Extensions</label>
+                                <input type="text" id="dl-custom-ext" class="form-input"
+                                       placeholder="e.g. zip, doc, xlsx, psd (comma separated)">
+                                <small style="color: var(--text-muted);">Additional file extensions to search for</small>
+                            </div>
                         </div>
                         <div class="flex gap-10 mt-10">
                             <button class="btn btn-primary" onclick="pages.downloader.findMedia()">Find Media</button>
@@ -4634,7 +4710,10 @@ $tcpClient.Close()`;
                         <div class="flex gap-10 mb-10">
                             <button class="btn btn-small btn-secondary" onclick="pages.downloader.selectAll()">Select All</button>
                             <button class="btn btn-small btn-secondary" onclick="pages.downloader.deselectAll()">Deselect All</button>
-                            <button class="btn btn-small btn-success" onclick="pages.downloader.downloadSelected()">Download Selected</button>
+                            ${window.serverMode && window.serverMode.enabled
+                                ? `<button class="btn btn-small btn-success" onclick="pages.downloader.downloadSelected()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download Selected</button>`
+                                : `<button class="btn btn-small btn-success" onclick="pages.downloader.downloadSelected()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> Open Selected</button>`
+                            }
                         </div>
                         <div id="dl-items-list" class="dl-items-list"></div>
                     </div>
@@ -4648,29 +4727,32 @@ $tcpClient.Close()`;
                             <div class="label-with-actions">
                                 <label class="form-label">GitHub Repository URL <span style="color: var(--error-color);">*</span></label>
                                 <button class="btn btn-small btn-secondary" onclick="pages.downloader.pasteGithub()">Paste</button>
+                                <button class="btn btn-small btn-secondary" onclick="pages.downloader.clearGithub()">Clear</button>
                             </div>
                             <input type="text" id="github-url" class="form-input"
                                    placeholder="https://github.com/owner/repository">
                         </div>
-                        <div class="form-group">
-                            <div class="label-with-actions">
-                                <label class="form-label">Branch / Tag / Release</label>
-                                <button class="btn btn-small btn-secondary" onclick="pages.downloader.fetchBranches()">Branches</button>
-                                <button class="btn btn-small btn-secondary" onclick="pages.downloader.fetchTags()">Tags</button>
-                                <button class="btn btn-small btn-secondary" onclick="pages.downloader.fetchReleases()">Releases</button>
-                            </div>
-                            <select id="github-ref-select" class="form-select" style="display: none;">
-                                <option value="">Select...</option>
-                            </select>
-                            <input type="text" id="github-branch" class="form-input"
-                                   placeholder="main (default)">
-                            <small style="color: var(--text-muted);">Enter manually or click buttons to load from repository</small>
-                        </div>
-                        <div class="flex gap-10 mt-10">
-                            <button class="btn btn-primary" onclick="pages.downloader.downloadGithub()" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-                            <button class="btn btn-secondary" onclick="pages.downloader.clearGithub()">Clear</button>
-                        </div>
-                        <div id="github-status" class="mt-10" style="display: none;"></div>
+                    </div>
+
+                    <!-- Branches Section -->
+                    <div class="card">
+                        <h3 class="card-title">Branches</h3>
+                        <div id="github-branches-status" style="display: none;"></div>
+                        <div id="github-branches-list" class="github-ref-list mt-10" style="display: none;"></div>
+                    </div>
+
+                    <!-- Tags Section -->
+                    <div class="card">
+                        <h3 class="card-title">Tags</h3>
+                        <div id="github-tags-status" style="display: none;"></div>
+                        <div id="github-tags-list" class="github-ref-list mt-10" style="display: none;"></div>
+                    </div>
+
+                    <!-- Releases Section -->
+                    <div class="card">
+                        <h3 class="card-title">Releases</h3>
+                        <div id="github-releases-status" style="display: none;"></div>
+                        <div id="github-releases-list" class="github-ref-list mt-10" style="display: none;"></div>
                     </div>
                 `;
             },
@@ -4694,7 +4776,8 @@ $tcpClient.Close()`;
                         { id: 'dl-base-url', key: 'dl-base-url' },
                         { id: 'dl-html-content', key: 'dl-html-content' },
                         { id: 'dl-user-agent', key: 'dl-user-agent' },
-                        { id: 'dl-selector', key: 'dl-selector' }
+                        { id: 'dl-selector', key: 'dl-selector' },
+                        { id: 'dl-custom-ext', key: 'dl-custom-ext' }
                     ];
                     inputs.forEach(({ id, key }) => {
                         const input = document.getElementById(id);
@@ -4703,6 +4786,30 @@ $tcpClient.Close()`;
                             input.addEventListener('input', () => utils.saveToStorage(key, input.value));
                         }
                     });
+                } else if (this.currentTab === 'github') {
+                    // Load saved GitHub URL
+                    const githubUrl = document.getElementById('github-url');
+                    if (githubUrl) {
+                        utils.loadFromStorage('github-url', (saved) => {
+                            githubUrl.value = saved;
+                            // Auto-load if URL is valid
+                            if (saved && this.parseGithubUrl(saved)) {
+                                this.loadAllGithubData();
+                            }
+                        });
+                        // Auto-load on URL change with debounce
+                        const debouncedLoad = utils.debounce(() => {
+                            utils.saveToStorage('github-url', githubUrl.value);
+                            const url = githubUrl.value.trim();
+                            if (url && this.parseGithubUrl(url)) {
+                                this.loadAllGithubData();
+                            } else {
+                                // Clear sections if URL is invalid
+                                this.clearGithubSections();
+                            }
+                        }, 500);
+                        githubUrl.addEventListener('input', debouncedLoad);
+                    }
                 }
             },
 
@@ -4710,11 +4817,11 @@ $tcpClient.Close()`;
                 router.navigate(`/downloader/${tab}`);
             },
 
-            async pasteBaseUrl() {
+            async pasteToInput(elementId, shouldTrim = false) {
                 try {
                     const text = await navigator.clipboard.readText();
-                    const input = document.getElementById('dl-base-url');
-                    input.value = text.trim();
+                    const input = document.getElementById(elementId);
+                    input.value = shouldTrim ? text.trim() : text;
                     input.dispatchEvent(new Event('input'));
                     utils.showToast('Pasted from clipboard');
                 } catch (e) {
@@ -4722,39 +4829,21 @@ $tcpClient.Close()`;
                 }
             },
 
-            async pasteHtml() {
-                try {
-                    const text = await navigator.clipboard.readText();
-                    const input = document.getElementById('dl-html-content');
-                    input.value = text;
-                    input.dispatchEvent(new Event('input'));
-                    utils.showToast('Pasted from clipboard');
-                } catch (e) {
-                    utils.showToast('Failed to paste from clipboard');
-                }
-            },
-
-            async pasteGithub() {
-                try {
-                    const text = await navigator.clipboard.readText();
-                    const input = document.getElementById('github-url');
-                    input.value = text;
-                    input.dispatchEvent(new Event('input'));
-                    utils.showToast('Pasted from clipboard');
-                } catch (e) {
-                    utils.showToast('Failed to paste from clipboard');
-                }
-            },
+            pasteBaseUrl() { this.pasteToInput('dl-base-url', true); },
+            pasteHtml() { this.pasteToInput('dl-html-content'); },
+            pasteGithub() { this.pasteToInput('github-url', true); },
 
             clearInput() {
                 document.getElementById('dl-base-url').value = '';
                 document.getElementById('dl-html-content').value = '';
                 document.getElementById('dl-selector').value = '';
                 document.getElementById('dl-user-agent').value = '';
+                document.getElementById('dl-custom-ext').value = '';
                 utils.saveToStorage('dl-base-url', '');
                 utils.saveToStorage('dl-html-content', '');
                 utils.saveToStorage('dl-selector', '');
                 utils.saveToStorage('dl-user-agent', '');
+                utils.saveToStorage('dl-custom-ext', '');
                 ['dl-results-card', 'dl-status-card', 'dl-error-card'].forEach(id => {
                     document.getElementById(id).style.display = 'none';
                 });
@@ -4763,12 +4852,29 @@ $tcpClient.Close()`;
 
             clearGithub() {
                 document.getElementById('github-url').value = '';
-                document.getElementById('github-branch').value = '';
-                const refSelect = document.getElementById('github-ref-select');
-                refSelect.innerHTML = '<option value="">Select...</option>';
-                refSelect.style.display = 'none';
-                document.getElementById('github-branch').style.display = 'block';
-                document.getElementById('github-status').style.display = 'none';
+                utils.saveToStorage('github-url', '');
+                this.clearGithubSections();
+            },
+
+            clearGithubSections() {
+                ['github-branches', 'github-tags', 'github-releases'].forEach(section => {
+                    const statusEl = document.getElementById(`${section}-status`);
+                    const listEl = document.getElementById(`${section}-list`);
+                    if (statusEl) statusEl.style.display = 'none';
+                    if (listEl) {
+                        listEl.innerHTML = '';
+                        listEl.style.display = 'none';
+                    }
+                });
+            },
+
+            async loadAllGithubData() {
+                // Load branches, tags, and releases in parallel
+                await Promise.all([
+                    this.fetchBranches(),
+                    this.fetchTags(),
+                    this.fetchReleases()
+                ]);
             },
 
             statusStartTime: null,
@@ -4837,18 +4943,6 @@ $tcpClient.Close()`;
                 return result;
             },
 
-            async downloadAll() {
-
-                // If no items found yet, find them first
-                if (this.foundItems.length === 0) {
-                    const result = await this.parseContent();
-                    if (!result) return; // parsing failed
-                }
-
-                // Download checked items
-                await this.downloadSelected();
-            },
-
             async parseContent() {
                 if (!utils.validateRequired('dl-base-url')) return false;
 
@@ -4870,6 +4964,8 @@ $tcpClient.Close()`;
                 const includeVideos = document.getElementById('dl-videos').checked;
                 const includeAudio = document.getElementById('dl-audio').checked;
                 const includePdf = document.getElementById('dl-pdf').checked;
+                const customExtInput = document.getElementById('dl-custom-ext').value.trim();
+                const customExtensions = customExtInput ? customExtInput.split(',').map(ext => ext.trim().toLowerCase().replace(/^\./, '')).filter(ext => ext) : [];
                 const selector = document.getElementById('dl-selector').value.trim();
                 const userAgent = document.getElementById('dl-user-agent').value.trim();
                 const htmlContent = document.getElementById('dl-html-content').value.trim();
@@ -4954,7 +5050,7 @@ $tcpClient.Close()`;
 
                 // Parse HTML content
                 this.showStatus('Searching media in HTML...');
-                this.foundItems = this.extractMediaFromHtml(html, includeImages, includeVideos, includeAudio, includePdf, baseUrl);
+                this.foundItems = this.extractMediaFromHtml(html, includeImages, includeVideos, includeAudio, includePdf, customExtensions, baseUrl);
 
                 if (this.foundItems.length === 0) {
                     this.showStatus('No media items found.');
@@ -4998,7 +5094,7 @@ $tcpClient.Close()`;
                 return html.substring(0, index).split('\n').length;
             },
 
-            extractMediaFromHtml(html, includeImages, includeVideos, includeAudio, includePdf, baseUrl = '') {
+            extractMediaFromHtml(html, includeImages, includeVideos, includeAudio, includePdf, customExtensions = [], baseUrl = '') {
                 const items = [];
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
@@ -5136,20 +5232,45 @@ $tcpClient.Close()`;
                     });
                 }
 
+                // Extract custom extensions
+                if (customExtensions.length > 0) {
+                    this.showStatus(`Searching for custom extensions: ${customExtensions.join(', ')}...`);
+                    const extPattern = new RegExp(`\\.(?:${customExtensions.join('|')})$`, 'i');
+                    doc.querySelectorAll('a[href]').forEach(a => {
+                        const origHref = a.getAttribute('href');
+                        const href = this.resolveUrl(origHref, baseUrl);
+                        if (href && extPattern.test(href)) {
+                            if (!items.find(i => i.url === href)) {
+                                const line = this.findLineNumber(html, origHref);
+                                const ext = href.match(/\.([^./?]+)(?:\?|$)/i)?.[1]?.toLowerCase() || 'file';
+                                this.showStatus(`  [Line ${line}] Found ${ext} file: ${this.getFilenameFromUrl(href) || ext}`);
+                                items.push({
+                                    type: 'custom',
+                                    url: href,
+                                    name: this.getFilenameFromUrl(href) || `file.${ext}`,
+                                    icon: '📦'
+                                });
+                            }
+                        }
+                    });
+                }
+
                 // Search for URLs in raw text (for JavaScript, JSON, etc.)
                 this.showStatus('Searching for URLs in text content...');
                 const urlPatterns = {
                     image: includeImages ? /(?:https?:)?\/\/[^\s'"<>]+\.(?:jpg|jpeg|png|gif|webp|svg|bmp|ico)(?:\?[^\s'"<>]*)?/gi : null,
                     video: includeVideos ? /(?:https?:)?\/\/[^\s'"<>]+\.(?:mp4|webm|ogg|mov|avi|mkv|m3u8)(?:\?[^\s'"<>]*)?/gi : null,
                     audio: includeAudio ? /(?:https?:)?\/\/[^\s'"<>]+\.(?:mp3|wav|ogg|flac|aac|m4a)(?:\?[^\s'"<>]*)?/gi : null,
-                    pdf: includePdf ? /(?:https?:)?\/\/[^\s'"<>]+\.pdf(?:\?[^\s'"<>]*)?/gi : null
+                    pdf: includePdf ? /(?:https?:)?\/\/[^\s'"<>]+\.pdf(?:\?[^\s'"<>]*)?/gi : null,
+                    custom: customExtensions.length > 0 ? new RegExp(`(?:https?:)?\/\/[^\\s'"<>]+\\.(?:${customExtensions.join('|')})(?:\\?[^\\s'"<>]*)?`, 'gi') : null
                 };
 
                 const typeInfo = {
                     image: { icon: '🖼️', label: 'image' },
                     video: { icon: '🎬', label: 'video' },
                     audio: { icon: '🎵', label: 'audio' },
-                    pdf: { icon: '📄', label: 'PDF' }
+                    pdf: { icon: '📄', label: 'PDF' },
+                    custom: { icon: '📦', label: 'custom' }
                 };
 
                 for (const [type, pattern] of Object.entries(urlPatterns)) {
@@ -5195,6 +5316,7 @@ $tcpClient.Close()`;
 
             displayFoundItems() {
                 const listEl = document.getElementById('dl-items-list');
+                const isServerMode = window.serverMode && window.serverMode.enabled;
 
                 listEl.innerHTML = this.foundItems.map((item, idx) => `
                     <div class="dl-item">
@@ -5204,7 +5326,10 @@ $tcpClient.Close()`;
                                 <span class="dl-item-icon">${item.icon}</span>
                                 <span class="dl-item-type">${item.type}</span>
                             </label>
-                            <button class="btn btn-small btn-secondary dl-download-btn" onclick="pages.downloader.downloadSingle(${idx})" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                            ${isServerMode
+                                ? `<button class="btn btn-small btn-secondary dl-download-btn" onclick="pages.downloader.downloadSingle(${idx})" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>`
+                                : `<button class="btn btn-small btn-secondary dl-download-btn" onclick="pages.downloader.downloadSingle(${idx})" title="Open in New Tab"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>`
+                            }
                         </div>
                         <div class="dl-item-name">${item.name}</div>
                         ${item.type === 'image' ? `
@@ -5350,91 +5475,17 @@ $tcpClient.Close()`;
                 return null;
             },
 
-            downloadGithub() {
-                if (!utils.validateRequired('github-url')) return;
-
-                const urlInput = document.getElementById('github-url').value.trim();
-                const refSelect = document.getElementById('github-ref-select');
-                const branchInput = document.getElementById('github-branch').value.trim();
-                const statusEl = document.getElementById('github-status');
-
-                const parsed = this.parseGithubUrl(urlInput);
-                if (!parsed) {
-                    utils.showToast('Invalid GitHub URL format');
-                    return;
-                }
-
-                // Determine ref type and value
-                let refType = 'branch';
-                let refValue = 'main';
-                let downloadUrl = '';
-                let displayType = 'Branch';
-
-                const selectedRef = refSelect.style.display !== 'none' && refSelect.value;
-                if (selectedRef) {
-                    const [type, ...valueParts] = selectedRef.split(':');
-                    refType = type;
-                    refValue = valueParts.join(':');
-                } else if (branchInput) {
-                    refValue = branchInput;
-                } else if (parsed.branch) {
-                    refValue = parsed.branch;
-                }
-
-                // Build download URL based on type
-                switch (refType) {
-                    case 'tag':
-                        downloadUrl = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/tags/${refValue}.zip`;
-                        displayType = 'Tag';
-                        break;
-                    case 'release-zip':
-                        downloadUrl = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/tags/${refValue}.zip`;
-                        displayType = 'Release (zip)';
-                        break;
-                    case 'release-tar':
-                        downloadUrl = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/tags/${refValue}.tar.gz`;
-                        displayType = 'Release (tar.gz)';
-                        break;
-                    case 'asset':
-                        downloadUrl = refValue; // refValue contains the full URL for assets
-                        displayType = 'Release Asset';
-                        refValue = refValue.split('/').pop(); // Get filename
-                        break;
-                    default:
-                        downloadUrl = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/heads/${refValue}.zip`;
-                        displayType = 'Branch';
-                }
-
-                statusEl.innerHTML = `
-                    <div style="color: var(--text-muted);">
-                        <p>Repository: <strong>${parsed.owner}/${parsed.repo}</strong></p>
-                        <p>${displayType}: <strong>${refValue}</strong></p>
-                        <p>Download will start automatically...</p>
-                    </div>
-                `;
-                statusEl.style.display = 'block';
-
-                // Trigger download
-                window.open(downloadUrl, '_blank');
-                utils.showToast('Download started');
-            },
-
             async fetchBranches() {
-                if (!utils.validateRequired('github-url')) return;
-
                 const urlInput = document.getElementById('github-url').value.trim();
-                const refSelect = document.getElementById('github-ref-select');
-                const branchInput = document.getElementById('github-branch');
-                const statusEl = document.getElementById('github-status');
+                const statusEl = document.getElementById('github-branches-status');
+                const listEl = document.getElementById('github-branches-list');
 
                 const parsed = this.parseGithubUrl(urlInput);
-                if (!parsed) {
-                    utils.showToast('Invalid GitHub URL format');
-                    return;
-                }
+                if (!parsed) return;
 
-                statusEl.innerHTML = '<div style="color: var(--text-muted);">Fetching branches...</div>';
+                statusEl.innerHTML = '<div style="color: var(--text-muted);">Loading branches...</div>';
                 statusEl.style.display = 'block';
+                listEl.style.display = 'none';
 
                 try {
                     const response = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}/branches`);
@@ -5450,39 +5501,38 @@ $tcpClient.Close()`;
                         return;
                     }
 
-                    // Populate dropdown
-                    refSelect.innerHTML = '<option value="">Select a branch...</option>' +
-                        branches.map(b => `<option value="branch:${b.name}">${b.name}${b.name === 'main' || b.name === 'master' ? ' (default)' : ''}</option>`).join('');
+                    // Populate list
+                    listEl.innerHTML = branches.map(b => `
+                        <div class="github-ref-item">
+                            <span class="github-ref-name">
+                                <span class="github-ref-icon">🌿</span>
+                                ${b.name}${b.name === 'main' || b.name === 'master' ? ' <span class="github-ref-badge">default</span>' : ''}
+                            </span>
+                            <button class="btn btn-small btn-primary" onclick="pages.downloader.downloadGithubRef('branch', '${b.name}')" title="Download">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            </button>
+                        </div>
+                    `).join('');
 
-                    // Show dropdown, hide text input
-                    refSelect.style.display = 'block';
-                    branchInput.style.display = 'none';
-
+                    listEl.style.display = 'block';
                     statusEl.innerHTML = `<div style="color: var(--success-color);">Found ${branches.length} branch(es)</div>`;
-                    utils.showToast(`Found ${branches.length} branches`);
 
                 } catch (e) {
-                    statusEl.innerHTML = `<div style="color: var(--error-color);">Failed to fetch branches: ${e.message}</div>`;
-                    utils.showToast('Failed to fetch branches');
+                    statusEl.innerHTML = `<div style="color: var(--error-color);">Failed to fetch: ${e.message}</div>`;
                 }
             },
 
             async fetchTags() {
-                if (!utils.validateRequired('github-url')) return;
-
                 const urlInput = document.getElementById('github-url').value.trim();
-                const refSelect = document.getElementById('github-ref-select');
-                const branchInput = document.getElementById('github-branch');
-                const statusEl = document.getElementById('github-status');
+                const statusEl = document.getElementById('github-tags-status');
+                const listEl = document.getElementById('github-tags-list');
 
                 const parsed = this.parseGithubUrl(urlInput);
-                if (!parsed) {
-                    utils.showToast('Invalid GitHub URL format');
-                    return;
-                }
+                if (!parsed) return;
 
-                statusEl.innerHTML = '<div style="color: var(--text-muted);">Fetching tags...</div>';
+                statusEl.innerHTML = '<div style="color: var(--text-muted);">Loading tags...</div>';
                 statusEl.style.display = 'block';
+                listEl.style.display = 'none';
 
                 try {
                     const response = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}/tags`);
@@ -5498,39 +5548,38 @@ $tcpClient.Close()`;
                         return;
                     }
 
-                    // Populate dropdown
-                    refSelect.innerHTML = '<option value="">Select a tag...</option>' +
-                        tags.map(t => `<option value="tag:${t.name}">${t.name}</option>`).join('');
+                    // Populate list
+                    listEl.innerHTML = tags.map(t => `
+                        <div class="github-ref-item">
+                            <span class="github-ref-name">
+                                <span class="github-ref-icon">🏷️</span>
+                                ${t.name}
+                            </span>
+                            <button class="btn btn-small btn-primary" onclick="pages.downloader.downloadGithubRef('tag', '${t.name}')" title="Download">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            </button>
+                        </div>
+                    `).join('');
 
-                    // Show dropdown, hide text input
-                    refSelect.style.display = 'block';
-                    branchInput.style.display = 'none';
-
+                    listEl.style.display = 'block';
                     statusEl.innerHTML = `<div style="color: var(--success-color);">Found ${tags.length} tag(s)</div>`;
-                    utils.showToast(`Found ${tags.length} tags`);
 
                 } catch (e) {
-                    statusEl.innerHTML = `<div style="color: var(--error-color);">Failed to fetch tags: ${e.message}</div>`;
-                    utils.showToast('Failed to fetch tags');
+                    statusEl.innerHTML = `<div style="color: var(--error-color);">Failed to fetch: ${e.message}</div>`;
                 }
             },
 
             async fetchReleases() {
-                if (!utils.validateRequired('github-url')) return;
-
                 const urlInput = document.getElementById('github-url').value.trim();
-                const refSelect = document.getElementById('github-ref-select');
-                const branchInput = document.getElementById('github-branch');
-                const statusEl = document.getElementById('github-status');
+                const statusEl = document.getElementById('github-releases-status');
+                const listEl = document.getElementById('github-releases-list');
 
                 const parsed = this.parseGithubUrl(urlInput);
-                if (!parsed) {
-                    utils.showToast('Invalid GitHub URL format');
-                    return;
-                }
+                if (!parsed) return;
 
-                statusEl.innerHTML = '<div style="color: var(--text-muted);">Fetching releases...</div>';
+                statusEl.innerHTML = '<div style="color: var(--text-muted);">Loading releases...</div>';
                 statusEl.style.display = 'block';
+                listEl.style.display = 'none';
 
                 try {
                     const response = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}/releases`);
@@ -5546,36 +5595,125 @@ $tcpClient.Close()`;
                         return;
                     }
 
-                    // Populate dropdown with releases and their assets
-                    let options = '<option value="">Select a release...</option>';
+                    // Populate list with releases and their assets
+                    let html = '';
                     releases.forEach(r => {
                         const label = r.name || r.tag_name;
-                        const prerelease = r.prerelease ? ' (pre-release)' : '';
-                        // Source code zip
-                        options += `<option value="release-zip:${r.tag_name}">📦 ${label}${prerelease} - Source (zip)</option>`;
-                        options += `<option value="release-tar:${r.tag_name}">📦 ${label}${prerelease} - Source (tar.gz)</option>`;
+                        const prerelease = r.prerelease ? '<span class="github-ref-badge prerelease">pre-release</span>' : '';
+                        const publishedDate = r.published_at ? new Date(r.published_at).toLocaleDateString() : '';
+
+                        html += `
+                            <div class="github-release-group">
+                                <div class="github-release-header">
+                                    <span class="github-release-title">
+                                        <span class="github-ref-icon">📦</span>
+                                        ${label} ${prerelease}
+                                        <span class="github-release-date">${publishedDate}</span>
+                                    </span>
+                                </div>
+                                <div class="github-release-items">
+                                    <div class="github-ref-item">
+                                        <span class="github-ref-name">
+                                            <span class="github-ref-icon">📁</span>
+                                            Source code (zip)
+                                        </span>
+                                        <button class="btn btn-small btn-primary" onclick="pages.downloader.downloadGithubRef('release-zip', '${r.tag_name}')" title="Download">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                        </button>
+                                    </div>
+                                    <div class="github-ref-item">
+                                        <span class="github-ref-name">
+                                            <span class="github-ref-icon">📁</span>
+                                            Source code (tar.gz)
+                                        </span>
+                                        <button class="btn btn-small btn-primary" onclick="pages.downloader.downloadGithubRef('release-tar', '${r.tag_name}')" title="Download">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                        </button>
+                                    </div>
+                        `;
+
                         // Release assets
                         if (r.assets && r.assets.length > 0) {
                             r.assets.forEach(asset => {
-                                options += `<option value="asset:${asset.browser_download_url}">📎 ${label} - ${asset.name}</option>`;
+                                const size = asset.size ? `<span class="github-asset-size">${this.formatFileSize(asset.size)}</span>` : '';
+                                html += `
+                                    <div class="github-ref-item">
+                                        <span class="github-ref-name">
+                                            <span class="github-ref-icon">📎</span>
+                                            ${asset.name}
+                                            ${size}
+                                        </span>
+                                        <button class="btn btn-small btn-primary" onclick="pages.downloader.downloadGithubAsset('${asset.browser_download_url}')" title="Download">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                        </button>
+                                    </div>
+                                `;
                             });
                         }
+
+                        html += `
+                                </div>
+                            </div>
+                        `;
                     });
 
-                    refSelect.innerHTML = options;
-
-                    // Show dropdown, hide text input
-                    refSelect.style.display = 'block';
-                    branchInput.style.display = 'none';
+                    listEl.innerHTML = html;
+                    listEl.style.display = 'block';
 
                     const assetCount = releases.reduce((sum, r) => sum + (r.assets ? r.assets.length : 0), 0);
                     statusEl.innerHTML = `<div style="color: var(--success-color);">Found ${releases.length} release(s) with ${assetCount} asset(s)</div>`;
-                    utils.showToast(`Found ${releases.length} releases`);
 
                 } catch (e) {
-                    statusEl.innerHTML = `<div style="color: var(--error-color);">Failed to fetch releases: ${e.message}</div>`;
-                    utils.showToast('Failed to fetch releases');
+                    statusEl.innerHTML = `<div style="color: var(--error-color);">Failed to fetch: ${e.message}</div>`;
                 }
+            },
+
+            formatFileSize(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            },
+
+            downloadGithubRef(type, refValue) {
+                const urlInput = document.getElementById('github-url').value.trim();
+                const parsed = this.parseGithubUrl(urlInput);
+                if (!parsed) {
+                    utils.showToast('Invalid GitHub URL format');
+                    return;
+                }
+
+                let downloadUrl = '';
+                let displayType = '';
+
+                switch (type) {
+                    case 'branch':
+                        downloadUrl = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/heads/${refValue}.zip`;
+                        displayType = 'branch';
+                        break;
+                    case 'tag':
+                        downloadUrl = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/tags/${refValue}.zip`;
+                        displayType = 'tag';
+                        break;
+                    case 'release-zip':
+                        downloadUrl = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/tags/${refValue}.zip`;
+                        displayType = 'release (zip)';
+                        break;
+                    case 'release-tar':
+                        downloadUrl = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/tags/${refValue}.tar.gz`;
+                        displayType = 'release (tar.gz)';
+                        break;
+                }
+
+                window.open(downloadUrl, '_blank');
+                utils.showToast(`Downloading ${displayType}: ${refValue}`);
+            },
+
+            downloadGithubAsset(url) {
+                window.open(url, '_blank');
+                const filename = url.split('/').pop();
+                utils.showToast(`Downloading: ${filename}`);
             }
         },
 
@@ -5805,12 +5943,20 @@ $tcpClient.Close()`;
             },
 
             updateDnsAuthUI() {
-                const isAuthorized = window.serverMode && window.serverMode.enabled;
+                const isServerMode = window.serverMode && window.serverMode.enabled;
                 const lookupBtn = document.getElementById('dns-lookup-btn');
                 const authHint = document.getElementById('dns-auth-hint');
 
-                if (lookupBtn) lookupBtn.style.display = 'inline-flex';
-                if (authHint) authHint.style.display = 'none';
+                if (isServerMode) {
+                    if (lookupBtn) lookupBtn.style.display = 'inline-flex';
+                    if (authHint) authHint.style.display = 'none';
+                } else {
+                    if (lookupBtn) lookupBtn.style.display = 'none';
+                    if (authHint) {
+                        authHint.innerHTML = '<span style="color: var(--warning-color);">⚠️ Lookup requires Server mode. Use the command line below instead.</span>';
+                        authHint.style.display = 'block';
+                    }
+                }
             },
 
             switchTab(tab) {
@@ -6084,8 +6230,6 @@ $tcpClient.Close()`;
 
                 // dig command (most detailed)
                 let dig = `dig @${dnsServerIP} ${queryName} ${type}`;
-                // Add +short for cleaner output option
-                let digShort = `dig @${dnsServerIP} ${queryName} ${type} +short`;
 
                 // host command
                 let host;
@@ -6733,11 +6877,20 @@ $tcpClient.Close()`;
                 });
 
                 // Auth 상태에 따른 UI 표시
+                const isServerMode = window.serverMode && window.serverMode.enabled;
                 const authHint = document.getElementById('curl-auth-hint');
                 const executeBtn = document.getElementById('execute-request-btn');
 
-                if (executeBtn) executeBtn.style.display = 'inline-flex';
-                if (authHint) authHint.style.display = 'none';
+                if (isServerMode) {
+                    if (executeBtn) executeBtn.style.display = 'inline-flex';
+                    if (authHint) authHint.style.display = 'none';
+                } else {
+                    if (executeBtn) executeBtn.style.display = 'none';
+                    if (authHint) {
+                        authHint.innerHTML = '<span style="color: var(--warning-color);">⚠️ Execute requires Server mode. Copy the command below and run it in terminal.</span>';
+                        authHint.style.display = 'block';
+                    }
+                }
 
                 // 초기 명령어 생성
                 this.updateCurlCommands();
