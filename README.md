@@ -88,6 +88,23 @@ Server 모드에서 추가로 사용할 수 있는 기능:
 - HTTP 요청 실행
 - cURL 요청 실행
 
+### 방법 4: Docker (컨테이너 배포)
+```bash
+# docker-compose로 실행
+docker-compose up -d
+
+# 포트 변경
+PORT=8080 docker-compose up -d
+
+# 로그 확인
+docker-compose logs -f
+
+# 중지
+docker-compose down
+```
+
+> **참고**: 구버전 docker-compose (Python 기반)에서 `KeyError: 'id'` 에러가 발생할 수 있으나, 컨테이너 실행에는 영향 없음. `docker compose` (v2)로 업그레이드하면 해결됨.
+
 ## 프로젝트 구조
 
 ```
@@ -97,6 +114,9 @@ online-tools/
 ├── styles.css          # 스타일시트 (다크/라이트 테마)
 ├── server.js           # Express 서버 (정적 파일 + API)
 ├── package.json        # Node.js 의존성
+├── Dockerfile          # Docker 이미지 빌드
+├── docker-compose.yml  # Docker Compose 설정
+├── .dockerignore       # Docker 빌드 제외 파일
 ├── CLAUDE.md           # Claude Code 가이드
 ├── README.md           # 이 파일
 │
