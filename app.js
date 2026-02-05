@@ -5,114 +5,50 @@
     // Server Mode Manager - Backend 연동 시 추가 기능 제공
     const serverMode = {
         enabled: false,
-        authenticated: false,
         backendUrl: '/api',
 
-        init() {
-            const toggle = document.getElementById('authToggle');
-
-            // file:// 프로토콜이면 토글 비활성화
-            if (window.location.protocol === 'file:') {
-                if (toggle) {
-                    toggle.disabled = true;
-                    toggle.parentElement.title = 'Server mode requires HTTP';
-                }
-                return;
-            }
-
-            // 로그인 후 돌아온 경우 인증 상태 확인
-            if (sessionStorage.getItem('serverModeLoginAttempt')) {
-                sessionStorage.removeItem('serverModeLoginAttempt');
-                this.checkAuthStatus();
-            }
-        },
-
-        updateAuthUI() {
-            const label = document.getElementById('authLabel');
-            const toggle = document.getElementById('authToggle');
-
-            if (this.authenticated) {
-                if (label) {
-                    label.textContent = 'Authorized';
-                    label.classList.add('authorized');
-                }
-                if (toggle) toggle.checked = true;
-            } else {
-                if (label) {
-                    label.textContent = 'Guest';
-                    label.classList.remove('authorized');
-                }
-                if (toggle) toggle.checked = false;
-            }
-        },
-
-        async checkAuthStatus() {
+        async init() {
+            // Backend 서버 확인
             try {
-                const response = await fetch('/api/auth/check', { credentials: 'include' });
+                const response = await fetch('/api/auth/check', {
+                    method: 'GET',
+                    timeout: 3000
+                });
                 if (response.ok) {
                     const data = await response.json();
-                    this.enabled = true;
-                    this.authenticated = data.authenticated;
-                    this.updateAuthUI();
+                    this.enabled = data.ok === true;
+                    console.log('Backend server:', this.enabled ? 'connected' : 'not available');
                 }
             } catch (e) {
-                // Backend 없음
                 this.enabled = false;
-                this.authenticated = false;
-                this.updateAuthUI();
+                console.log('Backend server: not available');
             }
         },
 
-        toggleAuth(checked) {
-            if (checked) {
-                // ON으로 전환 시도 -> 로그인 필요
-                this.login();
-            } else {
-                // OFF로 전환 -> 로그아웃
-                this.logout();
-            }
-        },
-
-        login() {
-            // 로그인 시도 표시 후 리다이렉트
-            sessionStorage.setItem('serverModeLoginAttempt', 'true');
-            window.location.href = '/api/auth/login';
-        },
-
-        logout() {
-            this.enabled = false;
-            this.authenticated = false;
-            this.updateAuthUI();
-            fetch('/api/auth/logout', { credentials: 'include' })
-                .then(() => window.location.reload());
-        },
-
-        // API 프록시 호출 (로그인 필요)
+        // API 프록시 호출
         async proxyFetch(url, options = {}) {
-            if (!this.enabled || !this.authenticated) {
-                throw new Error('Login required for this feature');
+            if (!this.enabled) {
+                throw new Error('Server mode required for this feature');
             }
 
             const response = await fetch('/api/proxy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ url, options })
             });
 
             return response.json();
         },
 
-        // 코드 실행 (로그인 필요)
+        // 코드 실행
         async execute(code, language) {
-            if (!this.enabled || !this.authenticated) {
-                throw new Error('Login required for this feature');
+            if (!this.enabled) {
+                throw new Error('Server mode required for this feature');
             }
 
             const response = await fetch('/api/execute', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ code, language })
             });
 
@@ -144,7 +80,7 @@
             },
             diff_match_patch: {
                 name: 'Diff (diff_match_patch)',
-                url: 'https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.min.js',
+                url: 'https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js',
                 check: () => typeof diff_match_patch !== 'undefined',
                 loaded: false,
                 loading: false
@@ -153,13 +89,6 @@
                 name: 'YAML (js-yaml)',
                 url: 'https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js',
                 check: () => typeof jsyaml !== 'undefined',
-                loaded: false,
-                loading: false
-            },
-            vkbeautify: {
-                name: 'XML/HTML (vkbeautify)',
-                url: 'https://cdnjs.cloudflare.com/ajax/libs/vkbeautify/0.99.00/vkbeautify.min.js',
-                check: () => typeof vkbeautify !== 'undefined',
                 loaded: false,
                 loading: false
             },
@@ -179,7 +108,7 @@
             },
             textile: {
                 name: 'Textile (textile-js)',
-                url: 'https://cdnjs.cloudflare.com/ajax/libs/textile-js/2.0.116/textile.min.js',
+                url: 'https://cdn.jsdelivr.net/npm/textile-js/lib/textile.min.js',
                 check: () => typeof textile !== 'undefined',
                 loaded: false,
                 loading: false
@@ -188,6 +117,13 @@
                 name: 'JavaScript (js-beautify)',
                 url: 'https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.11/beautify.min.js',
                 check: () => typeof js_beautify !== 'undefined',
+                loaded: false,
+                loading: false
+            },
+            htmlbeautify: {
+                name: 'HTML (js-beautify)',
+                url: 'https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.11/beautify-html.min.js',
+                check: () => typeof html_beautify !== 'undefined',
                 loaded: false,
                 loading: false
             },
@@ -209,10 +145,9 @@
             // Formatter tabs
             'formatter/json': [],  // Native JSON
             'formatter/yaml': ['jsyaml'],
-            'formatter/xml': ['vkbeautify'],
             'formatter/sql': ['sqlFormatter'],
-            'formatter/html': ['vkbeautify'],
             'formatter/javascript': ['jsbeautify'],
+            'formatter/html': ['htmlbeautify'],
             // Differ tabs
             'differ/text': ['diff_match_patch'],
             // Encrypt tabs
@@ -619,6 +554,90 @@
 
                 newLine = false;
                 result += char;
+            }
+
+            return result.trim();
+        },
+
+        // Simple HTML formatter (basic support)
+        formatHtml(html, indent = 4) {
+            const indentStr = indent === '\t' ? '\t' : ' '.repeat(indent);
+            let result = '';
+            let level = 0;
+
+            // Self-closing tags
+            const selfClosing = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'];
+            // Inline tags (don't add newlines)
+            const inlineTags = ['a', 'abbr', 'b', 'bdo', 'br', 'cite', 'code', 'dfn', 'em', 'i', 'img', 'kbd', 'label', 'map', 'object', 'q', 'samp', 'script', 'select', 'small', 'span', 'strong', 'sub', 'sup', 'textarea', 'tt', 'var'];
+            // Pre-formatted tags (preserve whitespace)
+            const preTags = ['pre', 'code', 'textarea', 'script', 'style'];
+
+            // Normalize input
+            html = html.replace(/>\s+</g, '><').trim();
+
+            let inPreTag = false;
+            let preTagName = '';
+            let i = 0;
+
+            while (i < html.length) {
+                // Check for tag
+                if (html[i] === '<') {
+                    const tagEnd = html.indexOf('>', i);
+                    if (tagEnd === -1) {
+                        result += html.substring(i);
+                        break;
+                    }
+
+                    const tag = html.substring(i, tagEnd + 1);
+                    const tagContent = tag.slice(1, -1).trim();
+                    const isClosing = tagContent.startsWith('/');
+                    const tagName = (isClosing ? tagContent.slice(1) : tagContent.split(/[\s\/]/)[0]).toLowerCase();
+                    const isSelfClosing = selfClosing.includes(tagName) || tag.endsWith('/>');
+
+                    // Handle pre-formatted tags
+                    if (preTags.includes(tagName)) {
+                        if (!isClosing) {
+                            inPreTag = true;
+                            preTagName = tagName;
+                        } else if (tagName === preTagName) {
+                            inPreTag = false;
+                            preTagName = '';
+                        }
+                    }
+
+                    if (inPreTag) {
+                        result += tag;
+                        i = tagEnd + 1;
+                        continue;
+                    }
+
+                    if (isClosing) {
+                        level = Math.max(0, level - 1);
+                        result += '\n' + indentStr.repeat(level) + tag;
+                    } else if (isSelfClosing) {
+                        result += '\n' + indentStr.repeat(level) + tag;
+                    } else {
+                        result += '\n' + indentStr.repeat(level) + tag;
+                        level++;
+                    }
+
+                    i = tagEnd + 1;
+                } else {
+                    // Text content
+                    const nextTag = html.indexOf('<', i);
+                    const text = nextTag === -1 ? html.substring(i) : html.substring(i, nextTag);
+                    const trimmedText = text.trim();
+
+                    if (trimmedText) {
+                        if (inPreTag) {
+                            result += text;
+                        } else {
+                            result += '\n' + indentStr.repeat(level) + trimmedText;
+                        }
+                    }
+
+                    i = nextTag === -1 ? html.length : nextTag;
+                }
             }
 
             return result.trim();
@@ -1308,6 +1327,41 @@
             }
         },
 
+        // Highlight required field with error
+        highlightRequired(elementId, show = true) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                if (show) {
+                    el.style.borderColor = 'var(--error-color)';
+                    el.style.boxShadow = '0 0 0 2px rgba(231, 76, 60, 0.2)';
+                    // Remove highlight when user starts typing
+                    const removeHighlight = () => {
+                        el.style.borderColor = '';
+                        el.style.boxShadow = '';
+                        el.removeEventListener('input', removeHighlight);
+                    };
+                    el.addEventListener('input', removeHighlight);
+                } else {
+                    el.style.borderColor = '';
+                    el.style.boxShadow = '';
+                }
+            }
+        },
+
+        // Validate required field - returns true if valid
+        validateRequired(elementId, showToast = true) {
+            const el = document.getElementById(elementId);
+            if (el && !el.value.trim()) {
+                this.highlightRequired(elementId, true);
+                if (showToast) {
+                    this.showToast('Please fill in the required field');
+                }
+                el.focus();
+                return false;
+            }
+            return true;
+        },
+
         // Clear multiple form elements
         clearElements(ids, storageKeys = []) {
             ids.forEach(id => {
@@ -1365,7 +1419,7 @@
                                 </div>
                             </div>
                             <div class="flex gap-10 mt-10">
-                                <button class="btn btn-secondary" onclick="pages.viewer.copy()">Copy</button>
+                                <button class="btn btn-secondary" onclick="pages.viewer.copy()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                 <button class="btn btn-secondary" onclick="pages.viewer.clear()">Clear</button>
                             </div>
                         </div>
@@ -1616,7 +1670,7 @@ Use \`console.log()\` to print messages.
 
         // Formatter Page
         formatter: {
-            tabs: ['json', 'yaml', 'javascript'],
+            tabs: ['json', 'yaml', 'javascript', 'html'],
 
             render(activeTab) {
                 activeTab = activeTab || 'json';
@@ -1641,7 +1695,7 @@ Use \`console.log()\` to print messages.
                                           placeholder="Paste your ${activeTab.toUpperCase()} here..."></textarea>
                                 <div class="flex justify-between align-center mt-5">
                                     <div class="flex gap-10">
-                                        <button class="btn btn-small btn-secondary" onclick="pages.formatter.copy()">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.formatter.copy()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                         <button class="btn btn-small btn-secondary" onclick="pages.formatter.clear()">Clear</button>
                                     </div>
                                     <div id="formatter-input-status" class="input-status">Pos: 0 Ln: 1 Col: 1 | Length: 0</div>
@@ -1651,6 +1705,7 @@ Use \`console.log()\` to print messages.
                             <div class="form-group">
                                 <div class="label-with-actions">
                                     <label class="form-label">Formatted Output</label>
+                                    <button class="btn btn-secondary btn-small" onclick="pages.formatter.copyOutput()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     <span class="indent-control">
                                         <label for="formatter-indent">Indent:</label>
                                         <select id="formatter-indent" onchange="pages.formatter.format()">
@@ -1714,6 +1769,7 @@ Use \`console.log()\` to print messages.
                     let useBuiltin = false;
                     if (self.currentTab === 'yaml') useBuiltin = !libraryLoader.isLoaded('jsyaml');
                     if (self.currentTab === 'javascript') useBuiltin = !libraryLoader.isLoaded('jsbeautify');
+                    if (self.currentTab === 'html') useBuiltin = !libraryLoader.isLoaded('htmlbeautify');
                     badge.style.display = useBuiltin ? 'inline-block' : 'none';
                                     };
 
@@ -1801,6 +1857,23 @@ Use \`console.log()\` to print messages.
                                 });
                             } else {
                                 formatted = builtinFormatters.formatJavaScript(input, indent);
+                            }
+                            break;
+                        case 'html':
+                            if (typeof html_beautify !== 'undefined') {
+                                const htmlIndent = indent === '\t' ? 1 : indent;
+                                formatted = html_beautify(input, {
+                                    indent_size: htmlIndent,
+                                    indent_char: indent === '\t' ? '\t' : ' ',
+                                    max_preserve_newlines: 1,
+                                    preserve_newlines: true,
+                                    indent_inner_html: true,
+                                    wrap_line_length: 0,
+                                    wrap_attributes: 'auto',
+                                    end_with_newline: false
+                                });
+                            } else {
+                                formatted = builtinFormatters.formatHtml(input, indent);
                             }
                             break;
                     }
@@ -2030,6 +2103,10 @@ Use \`console.log()\` to print messages.
                 utils.copyToClipboard(document.getElementById('formatter-input').value);
             },
 
+            copyOutput() {
+                utils.copyToClipboard(document.getElementById('formatter-output').textContent);
+            },
+
             clear() {
                 utils.clearElements(['formatter-input', 'formatter-output'], [`formatter-input-${this.currentTab}`]);
                 utils.hideError('formatter-error');
@@ -2061,7 +2138,7 @@ Use \`console.log()\` to print messages.
                                 </div>
                                 <textarea id="encoding-decoded" class="form-textarea"
                                           placeholder="Enter text to encode..."></textarea>
-                                <button class="btn btn-secondary mt-10" onclick="pages.encoding.copyDecoded()">Copy</button>
+                                <button class="btn btn-secondary mt-10" onclick="pages.encoding.copyDecoded()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                             </div>
                             <div class="arrow-indicator">↕</div>
                             <div class="form-group">
@@ -2071,11 +2148,11 @@ Use \`console.log()\` to print messages.
                                 </div>
                                 <textarea id="encoding-encoded" class="form-textarea"
                                           placeholder="Enter text to decode..."></textarea>
-                                <button class="btn btn-secondary mt-10" onclick="pages.encoding.copyEncoded()">Copy</button>
+                                <button class="btn btn-secondary mt-10" onclick="pages.encoding.copyEncoded()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                             </div>
                             <div id="encoding-error" class="message message-error" style="display: none;"></div>
                             <div class="flex gap-10 mt-10">
-                                <button class="btn btn-secondary" onclick="pages.encoding.clear()">Clear</button>
+                                <button class="btn btn-secondary" onclick="pages.encoding.clear()">Clear All</button>
                             </div>
                         </div>
                     </div>
@@ -2434,7 +2511,7 @@ Use \`console.log()\` to print messages.
                         <div class="card">
                             <div class="form-group">
                                 <div class="label-with-actions">
-                                    <label class="form-label">Input Text</label>
+                                    <label class="form-label">Input Text <span style="color: var(--error-color);">*</span></label>
                                     <button class="btn btn-small btn-secondary" onclick="pages.encrypt.pasteHash()">Paste</button>
                                 </div>
                                 <textarea id="hash-input" class="form-textarea"
@@ -2449,22 +2526,22 @@ Use \`console.log()\` to print messages.
                                     <div class="hash-result">
                                         <span class="hash-label">MD5</span>
                                         <span class="hash-value" id="hash-md5">-</span>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyHash('md5')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyHash('md5')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <div class="hash-result">
                                         <span class="hash-label">SHA-1</span>
                                         <span class="hash-value" id="hash-sha1">-</span>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyHash('sha1')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyHash('sha1')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <div class="hash-result">
                                         <span class="hash-label">SHA-256</span>
                                         <span class="hash-value" id="hash-sha256">-</span>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyHash('sha256')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyHash('sha256')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <div class="hash-result">
                                         <span class="hash-label">SHA-512</span>
                                         <span class="hash-value" id="hash-sha512">-</span>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyHash('sha512')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyHash('sha512')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                 </div>
                             </div>
@@ -2491,7 +2568,7 @@ Use \`console.log()\` to print messages.
                             <h3 class="card-title">Certificate Viewer</h3>
                             <div class="form-group">
                                 <div class="label-with-actions">
-                                    <label class="form-label">Certificate or URL</label>
+                                    <label class="form-label">Certificate or URL <span style="color: var(--error-color);">*</span></label>
                                     <span id="cert-input-type-badge" class="builtin-badge" style="display:none; background-color: var(--primary-color);"></span>
                                     <button class="btn btn-small btn-secondary" onclick="pages.encrypt.pasteCert()">Paste</button>
                                 </div>
@@ -2508,18 +2585,14 @@ google.com
 https://example.com:443"></textarea>
                             </div>
                             <div class="flex gap-10">
-                                <button class="btn btn-secondary" onclick="pages.encrypt.clearCert()">Clear</button>
-                                <button class="btn btn-primary" id="fetch-cert-btn" style="display: none;" onclick="pages.encrypt.fetchCertFromUrl()">
+                                <button class="btn btn-success" id="fetch-cert-btn" style="display: none;" onclick="pages.encrypt.fetchCertFromUrl()">
                                     <span id="fetch-cert-text">Fetch Certificate</span>
                                 </button>
+                                <button class="btn btn-secondary" onclick="pages.encrypt.clearCert()">Clear</button>
                             </div>
                         </div>
 
                         <div id="cert-error" class="message message-error" style="display: none;"></div>
-
-                        <div id="cert-auth-hint" class="message" style="display: none; background-color: var(--primary-color); color: white; opacity: 0.9;">
-                            Login to use the "Fetch Certificate" feature for automatic certificate retrieval.
-                        </div>
 
                         <div id="cert-commands" class="card" style="display: none;">
                             <h3 class="card-title">Commands to Fetch Certificate</h3>
@@ -2532,14 +2605,14 @@ https://example.com:443"></textarea>
                                 <div class="form-group">
                                     <div class="label-with-actions">
                                         <label class="form-label">OpenSSL - Get certificate</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyCertCommand('openssl')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyCertCommand('openssl')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <pre id="cmd-openssl" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <div class="label-with-actions">
                                         <label class="form-label">OpenSSL - View certificate details</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyCertCommand('openssl-view')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyCertCommand('openssl-view')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <pre id="cmd-openssl-view" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
@@ -2549,14 +2622,14 @@ https://example.com:443"></textarea>
                                 <div class="form-group">
                                     <div class="label-with-actions">
                                         <label class="form-label">PowerShell - Get certificate</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyCertCommand('powershell')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyCertCommand('powershell')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <pre id="cmd-powershell-cert" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <div class="label-with-actions">
                                         <label class="form-label">PowerShell - View certificate details</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyCertCommand('powershell-view')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.encrypt.copyCertCommand('powershell-view')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <pre id="cmd-powershell-view" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
@@ -2565,6 +2638,7 @@ https://example.com:443"></textarea>
 
                         <div id="cert-results" class="card" style="display: none;">
                             <h3 class="card-title">Certificate Information</h3>
+                            <div id="cert-url-info" style="display: none; margin-bottom: 15px; padding: 10px; background-color: var(--result-background); border-radius: 8px; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.9rem;"></div>
                             <div class="ip-result-grid" id="cert-result-grid"></div>
                         </div>
                     </div>
@@ -2700,6 +2774,7 @@ https://example.com:443"></textarea>
 
                 certInput.addEventListener('input', utils.debounce(() => {
                     utils.saveToStorage('cert-input', certInput.value);
+                    self.lastFetchedUrl = null; // 수동 입력 시 URL 정보 초기화
                     self.processCertInput();
                 }, 300));
             },
@@ -2749,33 +2824,17 @@ https://example.com:443"></textarea>
 
                 errorEl.style.display = 'none';
 
-                // Fetch 버튼: Authorized 상태이고 URL 입력 시에만 표시
-                const authHint = document.getElementById('cert-auth-hint');
-                if (fetchBtn) {
-                    if (inputType === 'url' && window.serverMode && window.serverMode.authenticated) {
-                        fetchBtn.style.display = 'inline-flex';
-                        if (authHint) authHint.style.display = 'none';
-                    } else {
-                        fetchBtn.style.display = 'none';
-                        // URL 입력인데 미인증 상태면 힌트 표시
-                        if (authHint && inputType === 'url') {
-                            authHint.style.display = 'block';
-                        } else if (authHint) {
-                            authHint.style.display = 'none';
-                        }
-                    }
-                }
-
                 if (inputType === 'url') {
+                    fetchBtn.style.display = 'inline-flex';
                     this.updateCertCommands();
                     resultsEl.style.display = 'none';
                 } else if (inputType === 'pem') {
+                    fetchBtn.style.display = 'none';
                     commandsEl.style.display = 'none';
-                    if (authHint) authHint.style.display = 'none';
                     this.parseCert();
                 } else {
+                    fetchBtn.style.display = 'none';
                     commandsEl.style.display = 'none';
-                    if (authHint) authHint.style.display = 'none';
                     resultsEl.style.display = 'none';
                 }
             },
@@ -2873,7 +2932,6 @@ $tcpClient.Close()`;
                     const response = await fetch('/api/cert/fetch', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
                         body: JSON.stringify({ host, port })
                     });
 
@@ -2882,6 +2940,9 @@ $tcpClient.Close()`;
                     if (!response.ok || !data.success) {
                         throw new Error(data.error || 'Failed to fetch certificate');
                     }
+
+                    // URL 정보 저장
+                    this.lastFetchedUrl = { host, port, originalUrl: input };
 
                     // 가져온 인증서를 입력창에 표시하고 파싱
                     document.getElementById('cert-input').value = data.pem;
@@ -2911,16 +2972,12 @@ $tcpClient.Close()`;
             },
 
             parseCert() {
+                if (!utils.validateRequired('cert-input')) return;
+
                 const pemInput = document.getElementById('cert-input').value.trim();
                 const errorEl = document.getElementById('cert-error');
                 const resultsEl = document.getElementById('cert-results');
-
-                if (!pemInput) {
-                    errorEl.textContent = 'Please enter a certificate in PEM format';
-                    errorEl.style.display = 'block';
-                    resultsEl.style.display = 'none';
-                    return;
-                }
+                const urlInfoEl = document.getElementById('cert-url-info');
 
                 if (!pemInput.includes('-----BEGIN CERTIFICATE-----')) {
                     errorEl.textContent = 'Invalid format. Certificate must be in PEM format (starts with -----BEGIN CERTIFICATE-----)';
@@ -2930,8 +2987,23 @@ $tcpClient.Close()`;
                 }
 
                 try {
+                    // URL 정보 표시
+                    if (this.lastFetchedUrl) {
+                        const { host, port, originalUrl } = this.lastFetchedUrl;
+                        urlInfoEl.innerHTML = `<strong>Source:</strong> ${utils.escapeHtml(originalUrl)} (${utils.escapeHtml(host)}:${port})`;
+                        urlInfoEl.style.display = 'block';
+                    } else {
+                        urlInfoEl.style.display = 'none';
+                    }
+
                     if (typeof forge !== 'undefined') {
-                        this.parseCertWithForge(pemInput);
+                        try {
+                            this.parseCertWithForge(pemInput);
+                        } catch (forgeErr) {
+                            // Forge doesn't support EC certificates well, fall back to basic parser
+                            console.warn('Forge parsing failed, using basic parser:', forgeErr.message);
+                            this.parseCertBasic(pemInput);
+                        }
                     } else {
                         this.parseCertBasic(pemInput);
                     }
@@ -3144,7 +3216,13 @@ $tcpClient.Close()`;
                     '2.5.4.3': 'CN', '2.5.4.6': 'C', '2.5.4.7': 'L', '2.5.4.8': 'ST', '2.5.4.10': 'O', '2.5.4.11': 'OU',
                     '1.2.840.113549.1.1.1': 'RSA', '1.2.840.113549.1.1.5': 'SHA1withRSA', '1.2.840.113549.1.1.11': 'SHA256withRSA',
                     '1.2.840.113549.1.1.12': 'SHA384withRSA', '1.2.840.113549.1.1.13': 'SHA512withRSA',
-                    '1.2.840.10045.4.3.2': 'SHA256withECDSA', '1.2.840.10045.4.3.3': 'SHA384withECDSA'
+                    '1.2.840.10045.4.3.2': 'SHA256withECDSA', '1.2.840.10045.4.3.3': 'SHA384withECDSA',
+                    '1.2.840.10045.4.3.4': 'SHA512withECDSA',
+                    // EC Public Key
+                    '1.2.840.10045.2.1': 'EC',
+                    // EC Named Curves
+                    '1.2.840.10045.3.1.7': 'P-256', '1.3.132.0.34': 'P-384', '1.3.132.0.35': 'P-521',
+                    '1.3.132.0.10': 'secp256k1'
                 };
 
                 const parseOID = (bytes) => {
@@ -3206,7 +3284,7 @@ $tcpClient.Close()`;
                 let certInfo = {
                     version: 'v1', serialNumber: 'Unknown', signatureAlgorithm: 'Unknown',
                     issuer: 'Unknown', subject: 'Unknown', notBefore: null, notAfter: null,
-                    publicKeyAlgorithm: 'Unknown', publicKeySize: null
+                    publicKeyAlgorithm: 'Unknown', publicKeySize: null, ecCurve: null
                 };
 
                 try {
@@ -3258,14 +3336,36 @@ $tcpClient.Close()`;
                         const algoSeq = parseElement(el.content, 0);
                         if (algoSeq && algoSeq.tag === 0x30) {
                             const oidEl = parseElement(algoSeq.content, 0);
-                            if (oidEl && oidEl.tag === 0x06) certInfo.publicKeyAlgorithm = oidNames[parseOID(oidEl.content)] || parseOID(oidEl.content);
+                            if (oidEl && oidEl.tag === 0x06) {
+                                const oid = parseOID(oidEl.content);
+                                certInfo.publicKeyAlgorithm = oidNames[oid] || oid;
+
+                                // For EC keys, get the curve name from the second OID
+                                if (certInfo.publicKeyAlgorithm === 'EC') {
+                                    const curveOidEl = parseElement(algoSeq.content, oidEl.totalLen);
+                                    if (curveOidEl && curveOidEl.tag === 0x06) {
+                                        const curveOid = parseOID(curveOidEl.content);
+                                        certInfo.ecCurve = oidNames[curveOid] || curveOid;
+                                    }
+                                }
+                            }
                         }
                         const keyBitString = parseElement(el.content, algoSeq.totalLen);
-                        if (keyBitString && keyBitString.tag === 0x03 && keyBitString.content.length > 1 && certInfo.publicKeyAlgorithm === 'RSA') {
-                            const rsaSeq = parseElement(keyBitString.content, 1);
-                            if (rsaSeq && rsaSeq.tag === 0x30) {
-                                const modulus = parseElement(rsaSeq.content, 0);
-                                if (modulus && modulus.tag === 0x02) certInfo.publicKeySize = (modulus.content.length - (modulus.content[0] === 0 ? 1 : 0)) * 8;
+                        if (keyBitString && keyBitString.tag === 0x03 && keyBitString.content.length > 1) {
+                            if (certInfo.publicKeyAlgorithm === 'RSA') {
+                                const rsaSeq = parseElement(keyBitString.content, 1);
+                                if (rsaSeq && rsaSeq.tag === 0x30) {
+                                    const modulus = parseElement(rsaSeq.content, 0);
+                                    if (modulus && modulus.tag === 0x02) certInfo.publicKeySize = (modulus.content.length - (modulus.content[0] === 0 ? 1 : 0)) * 8;
+                                }
+                            } else if (certInfo.publicKeyAlgorithm === 'EC') {
+                                // EC key size can be estimated from the curve or bit string length
+                                // The bit string contains the uncompressed point (04 || x || y)
+                                const keyLen = keyBitString.content.length - 1; // subtract unused bits byte
+                                if (keyLen > 0) {
+                                    // Uncompressed point: 1 byte prefix + 2 * coordinate size
+                                    certInfo.publicKeySize = ((keyLen - 1) / 2) * 8;
+                                }
                             }
                         }
                     }
@@ -3311,7 +3411,7 @@ $tcpClient.Close()`;
                     </div>
                     <div class="ip-result-item">
                         <div class="ip-result-label">Public Key</div>
-                        <div class="ip-result-value">${certInfo.publicKeyAlgorithm}${certInfo.publicKeySize ? ' ' + certInfo.publicKeySize + ' bits' : ''}</div>
+                        <div class="ip-result-value">${certInfo.publicKeyAlgorithm}${certInfo.ecCurve ? ' (' + certInfo.ecCurve + ')' : ''}${certInfo.publicKeySize ? ' ' + certInfo.publicKeySize + ' bits' : ''}</div>
                     </div>
                     <div class="ip-result-item">
                         <div class="ip-result-label">Certificate Size</div>
@@ -3324,7 +3424,8 @@ $tcpClient.Close()`;
             clearCert() {
                 utils.clearElements(['cert-input'], ['cert-input']);
                 utils.hideError('cert-error');
-                ['cert-results', 'cert-commands', 'cert-input-type-badge'].forEach(id => {
+                this.lastFetchedUrl = null;
+                ['cert-results', 'cert-commands', 'cert-input-type-badge', 'cert-url-info'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.style.display = 'none';
                 });
@@ -3347,7 +3448,7 @@ $tcpClient.Close()`;
 
             render(activeTab) {
                 activeTab = activeTab || 'counter';
-                const tabLabels = { counter: 'Counter', replacer: 'Search/Replace', compare: 'Compare' };
+                const tabLabels = { counter: 'Counter', replacer: 'Replace', compare: 'Compare' };
 
                 let content = '';
                 switch (activeTab) {
@@ -3390,7 +3491,7 @@ $tcpClient.Close()`;
                                       placeholder="Enter text to analyze..."></textarea>
                         </div>
                         <div class="flex gap-10 mt-10 mb-10">
-                            <button class="btn btn-secondary" onclick="pages.string.copyCounter()">Copy</button>
+                            <button class="btn btn-secondary" onclick="pages.string.copyCounter()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                             <button class="btn btn-secondary" onclick="pages.string.clearCounter()">Clear</button>
                         </div>
                         <div class="ip-result-grid" id="string-results">
@@ -3429,6 +3530,10 @@ $tcpClient.Close()`;
                             </div>
                             <textarea id="replacer-input" class="form-textarea large"
                                       placeholder="Enter text to search in..."></textarea>
+                            <div class="flex gap-10 mt-10">
+                                <button class="btn btn-secondary" onclick="pages.string.copyReplacerInput()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                                <button class="btn btn-secondary" onclick="pages.string.clearReplacer()">Clear</button>
+                            </div>
                         </div>
                         <div class="replacer-controls">
                             <div class="form-group">
@@ -3463,27 +3568,21 @@ $tcpClient.Close()`;
                             </div>
                         </div>
                         <div class="flex gap-10 mt-20">
-                            <button class="btn btn-primary" onclick="pages.string.searchReplacer()">Search</button>
                             <button class="btn btn-primary" onclick="pages.string.replaceAll()">Replace All</button>
-                            <button class="btn btn-secondary" onclick="pages.string.clearReplacer()">Clear</button>
                         </div>
                     </div>
                     <div class="card" id="replacer-result-card" style="display: none;">
                         <div class="replacer-stats" id="replacer-stats">
-                            <span class="replacer-stat" id="result-stat-search"><strong>Matches:</strong> <span id="match-count">0</span></span>
-                            <span class="replacer-stat" id="result-stat-replace" style="display: none;"><strong>Replaced:</strong> <span id="replace-count">0</span> occurrence(s)</span>
+                            <span class="replacer-stat" id="result-stat-search"><strong>Matches:</strong> <span id="match-count">0</span> <span id="match-positions" class="match-positions"></span></span>
+                            <span class="replacer-stat" id="result-stat-replace" style="display: none;"><strong>Replaced:</strong> <span id="replace-count">0</span> <span id="replace-positions" class="match-positions"></span></span>
                         </div>
                         <div class="form-group">
                             <label class="form-label" id="result-label">Result</label>
                             <div id="replacer-result" class="replacer-result-box"></div>
                         </div>
-                        <div class="form-group" id="match-positions-group" style="display: none;">
-                            <label class="form-label">Match Positions</label>
-                            <div id="match-positions" class="match-positions"></div>
-                        </div>
                         <div class="flex gap-10 mt-20" id="replace-actions" style="display: none;">
                             <button class="btn btn-primary" onclick="pages.string.applyReplace()">Apply to Input</button>
-                            <button class="btn btn-secondary" onclick="pages.string.copyReplaceResult()">Copy</button>
+                            <button class="btn btn-secondary" onclick="pages.string.copyReplaceResult()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                         </div>
                     </div>
                 `;
@@ -3500,7 +3599,7 @@ $tcpClient.Close()`;
                                 </div>
                                 <textarea id="input-original" class="form-textarea" placeholder="Enter original text..."></textarea>
                                 <div class="flex gap-10 mt-10">
-                                    <button class="btn btn-secondary" onclick="pages.string.copyOriginal()">Copy</button>
+                                    <button class="btn btn-secondary" onclick="pages.string.copyOriginal()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     <button class="btn btn-secondary" onclick="pages.string.clearOriginal()">Clear</button>
                                 </div>
                             </div>
@@ -3511,7 +3610,7 @@ $tcpClient.Close()`;
                                 </div>
                                 <textarea id="input-modified" class="form-textarea" placeholder="Enter modified text..."></textarea>
                                 <div class="flex gap-10 mt-10">
-                                    <button class="btn btn-secondary" onclick="pages.string.copyModified()">Copy</button>
+                                    <button class="btn btn-secondary" onclick="pages.string.copyModified()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     <button class="btn btn-secondary" onclick="pages.string.clearModified()">Clear</button>
                                 </div>
                             </div>
@@ -3576,11 +3675,28 @@ $tcpClient.Close()`;
                     utils.loadFromStorage('replacer-regex', (v) => regexChk.checked = v === 'true');
                     utils.loadFromStorage('replacer-case', (v) => caseChk.checked = v === 'true');
 
-                    input.addEventListener('input', () => utils.saveToStorage('replacer-input', input.value));
-                    search.addEventListener('input', () => utils.saveToStorage('replacer-search', search.value));
+                    // 저장된 값으로 초기 검색 실행
+                    this.searchReplacer();
+
+                    const searchDebounced = utils.debounce(() => this.searchReplacer(), 150);
+
+                    input.addEventListener('input', () => {
+                        utils.saveToStorage('replacer-input', input.value);
+                        searchDebounced();
+                    });
+                    search.addEventListener('input', () => {
+                        utils.saveToStorage('replacer-search', search.value);
+                        searchDebounced();
+                    });
                     replace.addEventListener('input', () => utils.saveToStorage('replacer-replace', replace.value));
-                    regexChk.addEventListener('change', () => utils.saveToStorage('replacer-regex', regexChk.checked));
-                    caseChk.addEventListener('change', () => utils.saveToStorage('replacer-case', caseChk.checked));
+                    regexChk.addEventListener('change', () => {
+                        utils.saveToStorage('replacer-regex', regexChk.checked);
+                        this.searchReplacer();
+                    });
+                    caseChk.addEventListener('change', () => {
+                        utils.saveToStorage('replacer-case', caseChk.checked);
+                        this.searchReplacer();
+                    });
                 } else if (this.currentTab === 'compare') {
                     await this.loadDiffLibraries();
 
@@ -3713,9 +3829,14 @@ $tcpClient.Close()`;
                     const input = document.getElementById('replacer-input');
                     input.value = text;
                     utils.saveToStorage('replacer-input', text);
+                    this.searchReplacer();
                 } catch (e) {
                     utils.showToast('Failed to read clipboard', 'error');
                 }
+            },
+
+            copyReplacerInput() {
+                utils.copyToClipboard(document.getElementById('replacer-input').value);
             },
 
             searchReplacer() {
@@ -3726,7 +3847,6 @@ $tcpClient.Close()`;
                 const resultCard = document.getElementById('replacer-result-card');
                 const resultBox = document.getElementById('replacer-result');
                 const matchCount = document.getElementById('match-count');
-                const positionsGroup = document.getElementById('match-positions-group');
                 const positionsBox = document.getElementById('match-positions');
                 const resultLabel = document.getElementById('result-label');
                 const statSearch = document.getElementById('result-stat-search');
@@ -3752,7 +3872,7 @@ $tcpClient.Close()`;
 
                     if (matches.length === 0) {
                         resultBox.innerHTML = `<span class="text-muted">No matches found</span>`;
-                        positionsGroup.style.display = 'none';
+                        positionsBox.innerHTML = '';
                     } else {
                         // Build highlighted result
                         let html = '';
@@ -3765,14 +3885,13 @@ $tcpClient.Close()`;
                         html += utils.escapeHtml(input.substring(lastIndex));
                         resultBox.innerHTML = html;
 
-                        // Show positions
+                        // Show positions inline
                         const posHtml = matches.map((m, i) => {
                             const line = input.substring(0, m.index).split('\n').length;
                             const col = m.index - input.lastIndexOf('\n', m.index - 1);
-                            return `<span class="match-position">#${i + 1}: Line ${line}, Col ${col} "${utils.escapeHtml(m.text.substring(0, 20))}${m.text.length > 20 ? '...' : ''}"</span>`;
+                            return `<span class="match-position">L${line}:${col}</span>`;
                         }).join('');
                         positionsBox.innerHTML = posHtml;
-                        positionsGroup.style.display = 'block';
                     }
 
                     // Show search mode UI
@@ -3799,7 +3918,7 @@ $tcpClient.Close()`;
                 const statSearch = document.getElementById('result-stat-search');
                 const statReplace = document.getElementById('result-stat-replace');
                 const replaceActions = document.getElementById('replace-actions');
-                const positionsGroup = document.getElementById('match-positions-group');
+                const replacePositionsBox = document.getElementById('replace-positions');
 
                 if (!input || !searchText) {
                     utils.showToast('Please enter text and search pattern', 'error');
@@ -3846,11 +3965,18 @@ $tcpClient.Close()`;
                     replaceCount.textContent = matches.length;
                     resultBox.innerHTML = html;
 
+                    // Show positions for replacements
+                    const posHtml = matches.map((m, i) => {
+                        const line = input.substring(0, m.index).split('\n').length;
+                        const col = m.index - input.lastIndexOf('\n', m.index - 1);
+                        return `<span class="match-position">L${line}:${col}</span>`;
+                    }).join('');
+                    replacePositionsBox.innerHTML = posHtml;
+
                     // Show replace mode UI
                     resultLabel.textContent = 'Replace Result (replaced highlighted)';
                     statSearch.style.display = 'none';
                     statReplace.style.display = 'inline';
-                    positionsGroup.style.display = 'none';
                     replaceActions.style.display = 'flex';
                     resultCard.style.display = 'block';
                 } catch (e) {
@@ -4070,7 +4196,7 @@ $tcpClient.Close()`;
                             <input type="text" id="ip-input" class="form-input"
                                    placeholder="e.g., 192.168.1.0/24 or 192.168.1.0 255.255.255.0">
                             <div class="flex gap-10 mt-10">
-                                <button class="btn btn-secondary" onclick="pages.calculator.copy()">Copy</button>
+                                <button class="btn btn-secondary" onclick="pages.calculator.copy()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                 <button class="btn btn-secondary" onclick="pages.calculator.clear()">Clear</button>
                             </div>
                         </div>
@@ -4310,7 +4436,7 @@ $tcpClient.Close()`;
                     html += `
                         <div class="uuid-item">
                             <span>${uuid}</span>
-                            <button class="btn btn-small btn-secondary" onclick="pages.generator.copy('${uuid}')">Copy</button>
+                            <button class="btn btn-small btn-secondary" onclick="pages.generator.copy('${uuid}')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                         </div>
                     `;
                 }
@@ -4404,17 +4530,17 @@ $tcpClient.Close()`;
 
         // Downloader Page
         downloader: {
-            tabs: ['html', 'github'],
+            tabs: ['webscraping', 'github'],
             foundItems: [],
 
             render(activeTab) {
-                activeTab = activeTab || 'html';
-                const tabLabels = { html: 'HTML', github: 'Github' };
+                activeTab = activeTab || 'webscraping';
+                const tabLabels = { webscraping: 'WebScraping', github: 'Github' };
 
                 let content = '';
                 switch (activeTab) {
-                    case 'html':
-                        content = this.renderHtml();
+                    case 'webscraping':
+                        content = this.renderWebScraping();
                         break;
                     case 'github':
                         content = this.renderGithub();
@@ -4437,30 +4563,31 @@ $tcpClient.Close()`;
                 `;
             },
 
-            renderHtml() {
+            renderWebScraping() {
                 return `
                     <div class="card">
                         <div class="form-group">
                             <div class="label-with-actions">
-                                <label class="form-label">Base URL <span style="color: var(--error-color);">*</span></label>
+                                <label class="form-label">URL <span style="color: var(--error-color);">*</span></label>
                                 <button class="btn btn-small btn-secondary" onclick="pages.downloader.pasteBaseUrl()">Paste</button>
                             </div>
                             <input type="text" id="dl-base-url" class="form-input"
-                                   placeholder="https://example.com">
+                                   placeholder="https://example.com/page">
                         </div>
                         <div class="form-group">
                             <div class="label-with-actions">
-                                <label class="form-label">HTML Content <span style="color: var(--error-color);">*</span></label>
-                                <button class="btn btn-small btn-secondary" onclick="pages.downloader.paste()">Paste</button>
+                                <label class="form-label">HTML Content (optional)</label>
+                                <button class="btn btn-small btn-secondary" onclick="pages.downloader.pasteHtml()">Paste</button>
                             </div>
-                            <textarea id="downloader-input" class="form-textarea large"
-                                      placeholder="Paste HTML content here..."></textarea>
+                            <textarea id="dl-html-content" class="form-textarea large"
+                                      placeholder="Leave empty to fetch from URL automatically, or paste HTML content here..."></textarea>
+                            <small style="color: var(--text-muted);">If empty, HTML will be fetched from URL automatically</small>
                         </div>
                         <div class="form-group">
                             <label class="form-label">CSS Selector (optional)</label>
                             <input type="text" id="dl-selector" class="form-input"
                                    placeholder="e.g. #content, .gallery, article, div.post-body">
-                            <small style="color: var(--text-muted);">Leave empty to search entire HTML</small>
+                            <small style="color: var(--text-muted);">Leave empty to search entire page</small>
                         </div>
                         <div class="form-group">
                             <label class="form-label">User-Agent (optional)</label>
@@ -4504,10 +4631,7 @@ $tcpClient.Close()`;
                         <div class="flex gap-10 mb-10">
                             <button class="btn btn-small btn-secondary" onclick="pages.downloader.selectAll()">Select All</button>
                             <button class="btn btn-small btn-secondary" onclick="pages.downloader.deselectAll()">Deselect All</button>
-                            <button class="btn btn-small btn-success dl-auth-required" onclick="pages.downloader.downloadSelected()" style="display: none;">Download Selected</button>
-                        </div>
-                        <div id="dl-auth-hint" class="message" style="display: none; background-color: var(--primary-color); color: white; opacity: 0.9; margin-bottom: 15px;">
-                            Login to enable download functionality.
+                            <button class="btn btn-small btn-success" onclick="pages.downloader.downloadSelected()">Download Selected</button>
                         </div>
                         <div id="dl-items-list" class="dl-items-list"></div>
                     </div>
@@ -4519,7 +4643,7 @@ $tcpClient.Close()`;
                     <div class="card">
                         <div class="form-group">
                             <div class="label-with-actions">
-                                <label class="form-label">GitHub Repository URL</label>
+                                <label class="form-label">GitHub Repository URL <span style="color: var(--error-color);">*</span></label>
                                 <button class="btn btn-small btn-secondary" onclick="pages.downloader.pasteGithub()">Paste</button>
                             </div>
                             <input type="text" id="github-url" class="form-input"
@@ -4540,7 +4664,7 @@ $tcpClient.Close()`;
                             <small style="color: var(--text-muted);">Enter manually or click buttons to load from repository</small>
                         </div>
                         <div class="flex gap-10 mt-10">
-                            <button class="btn btn-primary" onclick="pages.downloader.downloadGithub()">Download</button>
+                            <button class="btn btn-primary" onclick="pages.downloader.downloadGithub()" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                             <button class="btn btn-secondary" onclick="pages.downloader.clearGithub()">Clear</button>
                         </div>
                         <div id="github-status" class="mt-10" style="display: none;"></div>
@@ -4549,10 +4673,10 @@ $tcpClient.Close()`;
             },
 
             async init(activeTab) {
-                this.currentTab = activeTab || 'html';
+                this.currentTab = activeTab || 'webscraping';
                 this.foundItems = [];
 
-                if (this.currentTab === 'html') {
+                if (this.currentTab === 'webscraping') {
                     // Load saved checkbox states
                     ['dl-images', 'dl-videos', 'dl-audio', 'dl-pdf'].forEach(id => {
                         const checkbox = document.getElementById(id);
@@ -4565,7 +4689,7 @@ $tcpClient.Close()`;
                     // Load saved inputs
                     const inputs = [
                         { id: 'dl-base-url', key: 'dl-base-url' },
-                        { id: 'downloader-input', key: 'dl-html-content' },
+                        { id: 'dl-html-content', key: 'dl-html-content' },
                         { id: 'dl-user-agent', key: 'dl-user-agent' },
                         { id: 'dl-selector', key: 'dl-selector' }
                     ];
@@ -4595,10 +4719,10 @@ $tcpClient.Close()`;
                 }
             },
 
-            async paste() {
+            async pasteHtml() {
                 try {
                     const text = await navigator.clipboard.readText();
-                    const input = document.getElementById('downloader-input');
+                    const input = document.getElementById('dl-html-content');
                     input.value = text;
                     input.dispatchEvent(new Event('input'));
                     utils.showToast('Pasted from clipboard');
@@ -4620,7 +4744,14 @@ $tcpClient.Close()`;
             },
 
             clearInput() {
-                utils.clearElements(['downloader-input'], ['dl-html-content']);
+                document.getElementById('dl-base-url').value = '';
+                document.getElementById('dl-html-content').value = '';
+                document.getElementById('dl-selector').value = '';
+                document.getElementById('dl-user-agent').value = '';
+                utils.saveToStorage('dl-base-url', '');
+                utils.saveToStorage('dl-html-content', '');
+                utils.saveToStorage('dl-selector', '');
+                utils.saveToStorage('dl-user-agent', '');
                 ['dl-results-card', 'dl-status-card', 'dl-error-card'].forEach(id => {
                     document.getElementById(id).style.display = 'none';
                 });
@@ -4704,10 +4835,6 @@ $tcpClient.Close()`;
             },
 
             async downloadAll() {
-                if (!window.serverMode || !window.serverMode.authenticated) {
-                    utils.showToast('Login required for download');
-                    return;
-                }
 
                 // If no items found yet, find them first
                 if (this.foundItems.length === 0) {
@@ -4720,30 +4847,78 @@ $tcpClient.Close()`;
             },
 
             async parseContent() {
-                const baseUrl = document.getElementById('dl-base-url').value.trim();
-                if (!baseUrl) {
-                    this.showError('Please enter Base URL');
-                    return false;
-                }
+                if (!utils.validateRequired('dl-base-url')) return false;
 
-                const input = document.getElementById('downloader-input').value.trim();
-                if (!input) {
-                    this.showError('Please enter HTML content');
+                const baseUrl = document.getElementById('dl-base-url').value.trim();
+
+                // Validate URL
+                try {
+                    new URL(baseUrl);
+                } catch (e) {
+                    this.showError('Invalid URL format');
                     return false;
                 }
 
                 this.clearStatus();
-                this.showStatus('Starting media search...');
-                this.showStatus(`Base URL: ${baseUrl}`);
+                this.showStatus('Starting web scraping...');
+                this.showStatus(`URL: ${baseUrl}`);
 
                 const includeImages = document.getElementById('dl-images').checked;
                 const includeVideos = document.getElementById('dl-videos').checked;
                 const includeAudio = document.getElementById('dl-audio').checked;
                 const includePdf = document.getElementById('dl-pdf').checked;
                 const selector = document.getElementById('dl-selector').value.trim();
+                const userAgent = document.getElementById('dl-user-agent').value.trim();
+                const htmlContent = document.getElementById('dl-html-content').value.trim();
 
-                let html = input;
-                this.showStatus(`Processing HTML content (${input.length} characters)`);
+                let html = '';
+
+                // Use provided HTML content or fetch from URL
+                if (htmlContent) {
+                    html = htmlContent;
+                    this.showStatus(`Using provided HTML content (${html.length.toLocaleString()} characters)`);
+                } else {
+                    // Fetch HTML from URL
+                    this.showStatus('Fetching page content...');
+                    try {
+                        const headers = {};
+                        if (userAgent) {
+                            headers['User-Agent'] = userAgent;
+                        }
+
+                        const response = await fetch('/api/network/http', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                url: baseUrl,
+                                method: 'GET',
+                                headers: headers
+                            })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+
+                        const result = await response.json();
+                        if (result.error) {
+                            throw new Error(result.error);
+                        }
+
+                        html = result.body || '';
+                        this.showStatus(`Received ${html.length.toLocaleString()} characters`);
+                    } catch (e) {
+                        this.showError(`Failed to fetch page: ${e.message}`);
+                        this.stopStatusSpinner();
+                        return false;
+                    }
+
+                    if (!html) {
+                        this.showError('No content received from URL');
+                        this.stopStatusSpinner();
+                        return false;
+                    }
+                }
 
                 // Apply CSS selector if provided
                 if (selector) {
@@ -4754,6 +4929,7 @@ $tcpClient.Close()`;
                         const elements = doc.querySelectorAll(selector);
                         if (elements.length === 0) {
                             this.showError(`No elements found matching selector: ${selector}`);
+                            this.stopStatusSpinner();
                             return false;
                         }
                         this.showStatus(`Found ${elements.length} element(s) matching selector`);
@@ -4761,6 +4937,7 @@ $tcpClient.Close()`;
                         html = Array.from(elements).map(el => el.outerHTML).join('\n');
                     } catch (e) {
                         this.showError(`Invalid CSS selector: ${selector}`);
+                        this.stopStatusSpinner();
                         return false;
                     }
                 }
@@ -4771,7 +4948,8 @@ $tcpClient.Close()`;
 
                 if (this.foundItems.length === 0) {
                     this.showStatus('No media items found.');
-                    this.showError('No media items found in the provided HTML content.');
+                    this.showError('No media items found in the page.');
+                    this.stopStatusSpinner();
                     return false;
                 }
 
@@ -4948,6 +5126,50 @@ $tcpClient.Close()`;
                     });
                 }
 
+                // Search for URLs in raw text (for JavaScript, JSON, etc.)
+                this.showStatus('Searching for URLs in text content...');
+                const urlPatterns = {
+                    image: includeImages ? /(?:https?:)?\/\/[^\s'"<>]+\.(?:jpg|jpeg|png|gif|webp|svg|bmp|ico)(?:\?[^\s'"<>]*)?/gi : null,
+                    video: includeVideos ? /(?:https?:)?\/\/[^\s'"<>]+\.(?:mp4|webm|ogg|mov|avi|mkv|m3u8)(?:\?[^\s'"<>]*)?/gi : null,
+                    audio: includeAudio ? /(?:https?:)?\/\/[^\s'"<>]+\.(?:mp3|wav|ogg|flac|aac|m4a)(?:\?[^\s'"<>]*)?/gi : null,
+                    pdf: includePdf ? /(?:https?:)?\/\/[^\s'"<>]+\.pdf(?:\?[^\s'"<>]*)?/gi : null
+                };
+
+                const typeInfo = {
+                    image: { icon: '🖼️', label: 'image' },
+                    video: { icon: '🎬', label: 'video' },
+                    audio: { icon: '🎵', label: 'audio' },
+                    pdf: { icon: '📄', label: 'PDF' }
+                };
+
+                for (const [type, pattern] of Object.entries(urlPatterns)) {
+                    if (!pattern) continue;
+
+                    let match;
+                    while ((match = pattern.exec(html)) !== null) {
+                        let url = match[0];
+                        // Handle protocol-relative URLs
+                        if (url.startsWith('//')) {
+                            url = 'https:' + url;
+                        }
+                        // Clean up escaped characters (common in JSON/JS)
+                        url = url.replace(/\\/g, '');
+
+                        const resolved = this.resolveUrl(url, baseUrl);
+                        if (resolved && !items.find(i => i.url === resolved)) {
+                            const line = this.findLineNumber(html, match[0]);
+                            const info = typeInfo[type];
+                            this.showStatus(`  [Line ${line}] Found ${info.label} URL: ${this.getFilenameFromUrl(resolved) || info.label}`);
+                            items.push({
+                                type: type,
+                                url: resolved,
+                                name: this.getFilenameFromUrl(resolved) || info.label,
+                                icon: info.icon
+                            });
+                        }
+                    }
+                }
+
                 return items;
             },
 
@@ -4963,7 +5185,6 @@ $tcpClient.Close()`;
 
             displayFoundItems() {
                 const listEl = document.getElementById('dl-items-list');
-                const isAuthorized = window.serverMode && window.serverMode.authenticated;
 
                 listEl.innerHTML = this.foundItems.map((item, idx) => `
                     <div class="dl-item">
@@ -4971,14 +5192,11 @@ $tcpClient.Close()`;
                             <label class="checkbox-label">
                                 <input type="checkbox" class="dl-item-check" data-index="${idx}" checked>
                                 <span class="dl-item-icon">${item.icon}</span>
-                                <span class="dl-item-name">${item.name}</span>
                                 <span class="dl-item-type">${item.type}</span>
                             </label>
-                            <div class="dl-item-actions">
-                                ${isAuthorized ? `<button class="btn btn-small btn-secondary" onclick="pages.downloader.downloadSingle(${idx})">Download</button>` : ''}
-                                <button class="btn btn-small btn-secondary" onclick="pages.downloader.copyUrl(${idx})">Copy URL</button>
-                            </div>
+                            <button class="btn btn-small btn-secondary dl-download-btn" onclick="pages.downloader.downloadSingle(${idx})" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                         </div>
+                        <div class="dl-item-name">${item.name}</div>
                         ${item.type === 'image' ? `
                             <div class="dl-item-preview">
                                 <img src="${item.url}" alt="${item.name}" onerror="this.parentElement.innerHTML='<span class=\\'preview-error\\'>Preview unavailable</span>'">
@@ -4999,23 +5217,14 @@ $tcpClient.Close()`;
                                 <iframe src="${item.url}" onerror="this.parentElement.innerHTML='<span class=\\'preview-error\\'>Preview unavailable</span>'"></iframe>
                             </div>
                         ` : ''}
-                        <div class="dl-item-url">${item.url}</div>
+                        <div class="dl-item-url">
+                            <span class="dl-item-url-text">${item.url}</span>
+                            <button class="btn btn-small btn-secondary dl-copy-btn" onclick="pages.downloader.copyUrl(${idx})" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                        </div>
                     </div>
                 `).join('');
 
                 document.getElementById('dl-results-card').style.display = 'block';
-
-                // Show/hide auth-dependent elements
-                const authHint = document.getElementById('dl-auth-hint');
-                const authButtons = document.querySelectorAll('.dl-auth-required');
-
-                if (isAuthorized) {
-                    if (authHint) authHint.style.display = 'none';
-                    authButtons.forEach(btn => btn.style.display = 'inline-flex');
-                } else {
-                    if (authHint) authHint.style.display = 'block';
-                    authButtons.forEach(btn => btn.style.display = 'none');
-                }
             },
 
             copyUrl(idx) {
@@ -5028,11 +5237,6 @@ $tcpClient.Close()`;
             downloadSingle(idx) {
                 const item = this.foundItems[idx];
                 if (!item) return;
-
-                if (!window.serverMode || !window.serverMode.authenticated) {
-                    utils.showToast('Login required for download');
-                    return;
-                }
 
                 // Backend 프록시를 통해 다운로드
                 const userAgent = document.getElementById('dl-user-agent')?.value || '';
@@ -5057,11 +5261,6 @@ $tcpClient.Close()`;
             },
 
             async downloadSelected() {
-                if (!window.serverMode || !window.serverMode.authenticated) {
-                    utils.showToast('Login required for download');
-                    return;
-                }
-
                 const selected = [];
                 document.querySelectorAll('.dl-item-check:checked').forEach(cb => {
                     const idx = parseInt(cb.dataset.index);
@@ -5117,15 +5316,12 @@ $tcpClient.Close()`;
             },
 
             downloadGithub() {
+                if (!utils.validateRequired('github-url')) return;
+
                 const urlInput = document.getElementById('github-url').value.trim();
                 const refSelect = document.getElementById('github-ref-select');
                 const branchInput = document.getElementById('github-branch').value.trim();
                 const statusEl = document.getElementById('github-status');
-
-                if (!urlInput) {
-                    utils.showToast('Please enter a GitHub URL');
-                    return;
-                }
 
                 const parsed = this.parseGithubUrl(urlInput);
                 if (!parsed) {
@@ -5189,15 +5385,12 @@ $tcpClient.Close()`;
             },
 
             async fetchBranches() {
+                if (!utils.validateRequired('github-url')) return;
+
                 const urlInput = document.getElementById('github-url').value.trim();
                 const refSelect = document.getElementById('github-ref-select');
                 const branchInput = document.getElementById('github-branch');
                 const statusEl = document.getElementById('github-status');
-
-                if (!urlInput) {
-                    utils.showToast('Please enter a GitHub URL first');
-                    return;
-                }
 
                 const parsed = this.parseGithubUrl(urlInput);
                 if (!parsed) {
@@ -5240,15 +5433,12 @@ $tcpClient.Close()`;
             },
 
             async fetchTags() {
+                if (!utils.validateRequired('github-url')) return;
+
                 const urlInput = document.getElementById('github-url').value.trim();
                 const refSelect = document.getElementById('github-ref-select');
                 const branchInput = document.getElementById('github-branch');
                 const statusEl = document.getElementById('github-status');
-
-                if (!urlInput) {
-                    utils.showToast('Please enter a GitHub URL first');
-                    return;
-                }
 
                 const parsed = this.parseGithubUrl(urlInput);
                 if (!parsed) {
@@ -5291,15 +5481,12 @@ $tcpClient.Close()`;
             },
 
             async fetchReleases() {
+                if (!utils.validateRequired('github-url')) return;
+
                 const urlInput = document.getElementById('github-url').value.trim();
                 const refSelect = document.getElementById('github-ref-select');
                 const branchInput = document.getElementById('github-branch');
                 const statusEl = document.getElementById('github-status');
-
-                if (!urlInput) {
-                    utils.showToast('Please enter a GitHub URL first');
-                    return;
-                }
 
                 const parsed = this.parseGithubUrl(urlInput);
                 if (!parsed) {
@@ -5407,7 +5594,7 @@ $tcpClient.Close()`;
                         <h3 class="card-title">DNS Lookup</h3>
                         <div class="form-group">
                             <div class="label-with-actions">
-                                <label class="form-label">Domain / IP Address</label>
+                                <label class="form-label">Domain / IP Address <span style="color: var(--error-color);">*</span></label>
                                 <button class="btn btn-small btn-secondary" onclick="pages.network.paste()">Paste</button>
                             </div>
                             <input type="text" id="dns-input" class="form-input"
@@ -5452,7 +5639,7 @@ $tcpClient.Close()`;
                             </div>
                         </div>
                         <div class="flex gap-10 mt-20">
-                            <button class="btn btn-primary network-auth-btn" id="dns-lookup-btn" onclick="pages.network.lookup()" style="display: none;">Lookup</button>
+                            <button class="btn btn-success network-auth-btn" id="dns-lookup-btn" onclick="pages.network.lookup()" style="display: none;">Lookup</button>
                             <button class="btn btn-secondary" onclick="pages.network.clear()">Clear</button>
                         </div>
                         <div id="dns-auth-hint" class="mt-10" style="font-size: 0.85rem; color: var(--text-muted);"></div>
@@ -5482,14 +5669,14 @@ $tcpClient.Close()`;
                             <div class="form-group">
                                 <div class="label-with-actions">
                                     <label class="form-label">CMD - nslookup</label>
-                                    <button class="btn btn-small btn-secondary" onclick="pages.network.copyCommand('win-nslookup')">Copy</button>
+                                    <button class="btn btn-small btn-secondary" onclick="pages.network.copyCommand('win-nslookup')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                 </div>
                                 <pre id="cmd-win-nslookup" class="result-box" style="margin: 0;"></pre>
                             </div>
                             <div class="form-group" style="margin-bottom: 0;">
                                 <div class="label-with-actions">
                                     <label class="form-label">PowerShell - Resolve-DnsName</label>
-                                    <button class="btn btn-small btn-secondary" onclick="pages.network.copyCommand('powershell')">Copy</button>
+                                    <button class="btn btn-small btn-secondary" onclick="pages.network.copyCommand('powershell')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                 </div>
                                 <pre id="cmd-powershell" class="result-box" style="margin: 0;"></pre>
                             </div>
@@ -5499,21 +5686,21 @@ $tcpClient.Close()`;
                             <div class="form-group">
                                 <div class="label-with-actions">
                                     <label class="form-label">dig</label>
-                                    <button class="btn btn-small btn-secondary" onclick="pages.network.copyCommand('dig')">Copy</button>
+                                    <button class="btn btn-small btn-secondary" onclick="pages.network.copyCommand('dig')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                 </div>
                                 <pre id="cmd-dig" class="result-box" style="margin: 0;"></pre>
                             </div>
                             <div class="form-group">
                                 <div class="label-with-actions">
                                     <label class="form-label">host</label>
-                                    <button class="btn btn-small btn-secondary" onclick="pages.network.copyCommand('host')">Copy</button>
+                                    <button class="btn btn-small btn-secondary" onclick="pages.network.copyCommand('host')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                 </div>
                                 <pre id="cmd-host" class="result-box" style="margin: 0;"></pre>
                             </div>
                             <div class="form-group" style="margin-bottom: 0;">
                                 <div class="label-with-actions">
                                     <label class="form-label">nslookup</label>
-                                    <button class="btn btn-small btn-secondary" onclick="pages.network.copyCommand('nslookup')">Copy</button>
+                                    <button class="btn btn-small btn-secondary" onclick="pages.network.copyCommand('nslookup')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                 </div>
                                 <pre id="cmd-nslookup" class="result-box" style="margin: 0;"></pre>
                             </div>
@@ -5583,17 +5770,12 @@ $tcpClient.Close()`;
             },
 
             updateDnsAuthUI() {
-                const isAuthorized = window.serverMode && window.serverMode.authenticated;
+                const isAuthorized = window.serverMode && window.serverMode.enabled;
                 const lookupBtn = document.getElementById('dns-lookup-btn');
                 const authHint = document.getElementById('dns-auth-hint');
 
-                if (isAuthorized) {
-                    if (lookupBtn) lookupBtn.style.display = 'inline-flex';
-                    if (authHint) authHint.innerHTML = '✓ <span style="color: var(--success-color);">DNS lookup enabled</span>';
-                } else {
-                    if (lookupBtn) lookupBtn.style.display = 'none';
-                    if (authHint) authHint.innerHTML = '<span style="color: var(--primary-color);">Login</span> to perform DNS lookups.';
-                }
+                if (lookupBtn) lookupBtn.style.display = 'inline-flex';
+                if (authHint) authHint.style.display = 'none';
             },
 
             switchTab(tab) {
@@ -5618,6 +5800,8 @@ $tcpClient.Close()`;
             },
 
             async lookup() {
+                if (!utils.validateRequired('dns-input')) return;
+
                 const input = document.getElementById('dns-input').value.trim();
                 const type = document.getElementById('dns-type').value;
                 const server = document.getElementById('dns-server').value;
@@ -5625,13 +5809,6 @@ $tcpClient.Close()`;
                 const loadingEl = document.getElementById('dns-loading');
                 const resultsEl = document.getElementById('dns-results');
                 const commandsEl = document.getElementById('dns-commands');
-
-                if (!input) {
-                    errorEl.textContent = 'Please enter a domain or IP address';
-                    errorEl.style.display = 'block';
-                    resultsEl.style.display = 'none';
-                    return;
-                }
 
                 errorEl.style.display = 'none';
                 loadingEl.style.display = 'block';
@@ -5676,8 +5853,7 @@ $tcpClient.Close()`;
 
                     const data = await response.json();
                     this.displayResults(data, input, queryType);
-                    commandsEl.style.display = 'block';
-                    this.updateCommands();
+                    commandsEl.style.display = 'none';
 
                 } catch (e) {
                     errorEl.textContent = `DNS query failed: ${e.message}`;
@@ -5947,7 +6123,10 @@ $tcpClient.Close()`;
                         </p>
 
                         <div class="form-group">
-                            <label class="form-label">Target (IP or Hostname)</label>
+                            <div class="label-with-actions">
+                                <label class="form-label">Target (IP or Hostname) <span style="color: var(--error-color);">*</span></label>
+                                <button class="btn btn-small btn-secondary" onclick="pages.network.pastePortTarget()">Paste</button>
+                            </div>
                             <input type="text" id="port-target" class="form-input"
                                    placeholder="e.g., 192.168.1.1, 10.0.0.0/24, example.com">
                             <div class="input-status">Supports: single IP, CIDR notation (10.0.0.0/24), IP range (10.0.0.1-10), hostname</div>
@@ -5973,12 +6152,12 @@ $tcpClient.Close()`;
                             <label class="form-label">Scan Type</label>
                             <div class="checkbox-group">
                                 <label class="checkbox-label">
-                                    <input type="radio" name="scan-type" value="remote" checked>
-                                    Remote - Check if port is accessible from this machine
+                                    <input type="radio" name="scan-type" value="connectivity" checked>
+                                    Connectivity - Check if firewall allows traffic to the port
                                 </label>
                                 <label class="checkbox-label">
-                                    <input type="radio" name="scan-type" value="local">
-                                    Local - Check listening ports on local machine
+                                    <input type="radio" name="scan-type" value="listen">
+                                    Listen - Check if destination port is listening (service running)
                                 </label>
                             </div>
                         </div>
@@ -6000,14 +6179,14 @@ $tcpClient.Close()`;
                                 <div class="form-group">
                                     <div class="label-with-actions">
                                         <label class="form-label">PowerShell - Test-NetConnection</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('ps-tnc')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('ps-tnc')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <pre id="cmd-ps-tnc" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
                                 <div class="form-group">
                                     <div class="label-with-actions">
                                         <label class="form-label">PowerShell - Test-Connection (TCP)</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('ps-tcp')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('ps-tcp')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <pre id="cmd-ps-tcp" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
@@ -6015,17 +6194,17 @@ $tcpClient.Close()`;
                             <div id="win-local-cmds" style="display: none;">
                                 <div class="form-group">
                                     <div class="label-with-actions">
-                                        <label class="form-label">CMD - netstat</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('win-netstat')">Copy</button>
+                                        <label class="form-label">PowerShell - TcpClient</label>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('ps-tcpclient')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
-                                    <pre id="cmd-win-netstat" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
+                                    <pre id="cmd-ps-tcpclient" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
                                 <div class="form-group">
                                     <div class="label-with-actions">
-                                        <label class="form-label">PowerShell - Get-NetTCPConnection</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('ps-netconn')">Copy</button>
+                                        <label class="form-label">CMD - telnet</label>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('win-telnet')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
-                                    <pre id="cmd-ps-netconn" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
+                                    <pre id="cmd-win-telnet" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
                             </div>
                         </div>
@@ -6035,21 +6214,21 @@ $tcpClient.Close()`;
                                 <div class="form-group">
                                     <div class="label-with-actions">
                                         <label class="form-label">netcat (nc)</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('nc')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('nc')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <pre id="cmd-nc" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
                                 <div class="form-group">
                                     <div class="label-with-actions">
                                         <label class="form-label">nmap</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('nmap')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('nmap')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <pre id="cmd-nmap" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
                                 <div class="form-group">
                                     <div class="label-with-actions">
                                         <label class="form-label">Bash - /dev/tcp (TCP only)</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('bash-tcp')">Copy</button>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('bash-tcp')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
                                     <pre id="cmd-bash-tcp" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
@@ -6057,24 +6236,24 @@ $tcpClient.Close()`;
                             <div id="linux-local-cmds" style="display: none;">
                                 <div class="form-group">
                                     <div class="label-with-actions">
-                                        <label class="form-label">ss (modern)</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('ss')">Copy</button>
+                                        <label class="form-label">netcat (nc) - scan mode</label>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('nc-listen')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
-                                    <pre id="cmd-ss" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
+                                    <pre id="cmd-nc-listen" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
                                 <div class="form-group">
                                     <div class="label-with-actions">
-                                        <label class="form-label">netstat</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('linux-netstat')">Copy</button>
+                                        <label class="form-label">telnet</label>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('linux-telnet')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
-                                    <pre id="cmd-linux-netstat" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
+                                    <pre id="cmd-linux-telnet" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
                                 <div class="form-group">
                                     <div class="label-with-actions">
-                                        <label class="form-label">lsof</label>
-                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('lsof')">Copy</button>
+                                        <label class="form-label">nmap - service detection</label>
+                                        <button class="btn btn-small btn-secondary" onclick="pages.network.copyPortCommand('nmap-listen')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                                     </div>
-                                    <pre id="cmd-lsof" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
+                                    <pre id="cmd-nmap-listen" class="result-box" style="margin: 0; white-space: pre-wrap;"></pre>
                                 </div>
                             </div>
                         </div>
@@ -6093,7 +6272,7 @@ $tcpClient.Close()`;
                 utils.loadFromStorage('port-protocol', (v) => protocol.value = v);
                 utils.loadFromStorage('port-range', (v) => portRange.value = v);
                 utils.loadFromStorage('port-scan-type', (v) => {
-                    scanTypeRadios.forEach(r => r.checked = r.value === v);
+                    if (v) scanTypeRadios.forEach(r => r.checked = r.value === v);
                 });
 
                 this.updatePortScanVisibility();
@@ -6131,23 +6310,23 @@ $tcpClient.Close()`;
             },
 
             updatePortScanVisibility() {
-                const scanType = document.querySelector('input[name="scan-type"]:checked')?.value || 'remote';
-                const isRemote = scanType === 'remote';
+                const scanType = document.querySelector('input[name="scan-type"]:checked')?.value || 'connectivity';
+                const isConnectivity = scanType === 'connectivity';
 
                 // Windows
-                document.getElementById('win-remote-cmds').style.display = isRemote ? 'block' : 'none';
-                document.getElementById('win-local-cmds').style.display = isRemote ? 'none' : 'block';
+                document.getElementById('win-remote-cmds').style.display = isConnectivity ? 'block' : 'none';
+                document.getElementById('win-local-cmds').style.display = isConnectivity ? 'none' : 'block';
 
                 // Linux
-                document.getElementById('linux-remote-cmds').style.display = isRemote ? 'block' : 'none';
-                document.getElementById('linux-local-cmds').style.display = isRemote ? 'none' : 'block';
+                document.getElementById('linux-remote-cmds').style.display = isConnectivity ? 'block' : 'none';
+                document.getElementById('linux-local-cmds').style.display = isConnectivity ? 'none' : 'block';
             },
 
             updatePortCommands() {
                 const target = document.getElementById('port-target').value.trim() || '192.168.1.1';
                 const protocol = document.getElementById('port-protocol').value;
                 const portRange = document.getElementById('port-range').value.trim() || '80';
-                const scanType = document.querySelector('input[name="scan-type"]:checked')?.value || 'remote';
+                const scanType = document.querySelector('input[name="scan-type"]:checked')?.value || 'connectivity';
 
                 // Parse port range for different command formats
                 const ports = this.parsePortRange(portRange);
@@ -6160,7 +6339,7 @@ $tcpClient.Close()`;
                 const isTcp = protocol === 'tcp' || protocol === 'both';
                 const isUdp = protocol === 'udp' || protocol === 'both';
 
-                if (scanType === 'remote') {
+                if (scanType === 'connectivity') {
                     // === Remote scanning commands ===
 
                     // PowerShell Test-NetConnection (single port only)
@@ -6218,64 +6397,53 @@ $tcpClient.Close()`;
                     document.getElementById('cmd-bash-tcp').textContent = bashTcp;
 
                 } else {
-                    // === Local listening commands ===
+                    // === Listen check commands (check if service is running) ===
 
-                    // Windows netstat
-                    let winNetstat = 'netstat -an';
-                    if (isTcp && !isUdp) winNetstat += ' -p tcp';
-                    else if (isUdp && !isTcp) winNetstat += ' -p udp';
-                    winNetstat += ' | findstr "LISTENING"';
-                    if (portRange && portRange !== '80') {
-                        winNetstat += ` | findstr ":${firstPort}"`;
+                    // PowerShell TcpClient - attempts actual connection
+                    let psTcpClient;
+                    if (hasMultiple) {
+                        psTcpClient = `# Check if ports are listening\n@(${portList}) | ForEach-Object {\n    $port = $_\n    $tcp = New-Object System.Net.Sockets.TcpClient\n    try {\n        $tcp.Connect("${target}", $port)\n        if ($tcp.Connected) {\n            Write-Host "Port $port - Service LISTENING" -ForegroundColor Green\n        }\n    } catch {\n        Write-Host "Port $port - NOT listening" -ForegroundColor Red\n    } finally {\n        $tcp.Close()\n    }\n}`;
+                    } else {
+                        psTcpClient = `$tcp = New-Object System.Net.Sockets.TcpClient\ntry {\n    $tcp.Connect("${target}", ${firstPort})\n    if ($tcp.Connected) {\n        Write-Host "Port ${firstPort} - Service LISTENING"\n    }\n} catch {\n    Write-Host "Port ${firstPort} - NOT listening"\n} finally {\n    $tcp.Close()\n}`;
                     }
 
-                    // PowerShell Get-NetTCPConnection
-                    let psNetconn = '';
-                    if (isTcp) {
-                        psNetconn = `Get-NetTCPConnection -State Listen`;
-                        if (portRange && portRange !== '80') {
-                            psNetconn += ` | Where-Object LocalPort -eq ${firstPort}`;
+                    // Windows telnet
+                    const winTelnet = `telnet ${target} ${firstPort}`;
+
+                    // netcat scan mode - checks if port accepts connection
+                    let ncListen;
+                    if (hasRange) {
+                        const rangeParts = portRange.match(/(\d+)-(\d+)/);
+                        if (rangeParts) {
+                            ncListen = `nc -zv ${target} ${rangeParts[1]}-${rangeParts[2]} 2>&1 | grep -E "(open|succeeded)"`;
+                        } else {
+                            ncListen = `nc -zv ${target} ${firstPort}`;
                         }
-                    }
-                    if (isUdp) {
-                        if (psNetconn) psNetconn += '\n\n# UDP:\n';
-                        psNetconn += `Get-NetUDPEndpoint`;
-                        if (portRange && portRange !== '80') {
-                            psNetconn += ` | Where-Object LocalPort -eq ${firstPort}`;
-                        }
+                    } else if (hasMultiple) {
+                        ncListen = `nc -zv ${target} ${portList.replace(/,/g, ' ')} 2>&1 | grep -E "(open|succeeded)"`;
+                    } else {
+                        ncListen = `nc -zv ${target} ${firstPort}`;
                     }
 
-                    // ss command
-                    let ssFlags = '-ln';
-                    if (isTcp && !isUdp) ssFlags += 't';
-                    else if (isUdp && !isTcp) ssFlags += 'u';
-                    else ssFlags += 'tu';
-                    let ss = `ss ${ssFlags}`;
-                    if (portRange && portRange !== '80') {
-                        ss += ` | grep ":${firstPort}"`;
+                    // Linux telnet
+                    const linuxTelnet = `telnet ${target} ${firstPort}`;
+
+                    // nmap service version detection
+                    let nmapListen;
+                    const nmapProto = isUdp ? '-sU' : '-sT';
+                    if (hasRange) {
+                        nmapListen = `nmap ${nmapProto} -sV -p ${portRange} ${target}`;
+                    } else if (hasMultiple) {
+                        nmapListen = `nmap ${nmapProto} -sV -p ${portList} ${target}`;
+                    } else {
+                        nmapListen = `nmap ${nmapProto} -sV -p ${firstPort} ${target}`;
                     }
 
-                    // Linux netstat
-                    let linuxNetstat = 'netstat';
-                    if (isTcp && !isUdp) linuxNetstat += ' -tln';
-                    else if (isUdp && !isTcp) linuxNetstat += ' -uln';
-                    else linuxNetstat += ' -tuln';
-                    if (portRange && portRange !== '80') {
-                        linuxNetstat += ` | grep ":${firstPort}"`;
-                    }
-
-                    // lsof
-                    let lsof = 'lsof -i';
-                    if (isTcp && !isUdp) lsof += ' -sTCP:LISTEN';
-                    if (portRange && portRange !== '80') {
-                        lsof += ` | grep ":${firstPort}"`;
-                    }
-
-                    document.getElementById('cmd-win-netstat').textContent = winNetstat;
-                    document.getElementById('cmd-ps-netconn').textContent = psNetconn;
-                    document.getElementById('cmd-ss').textContent = ss;
-                    document.getElementById('cmd-linux-netstat').textContent = linuxNetstat;
-                    document.getElementById('cmd-lsof').textContent = lsof;
+                    document.getElementById('cmd-ps-tcpclient').textContent = psTcpClient;
+                    document.getElementById('cmd-win-telnet').textContent = winTelnet;
+                    document.getElementById('cmd-nc-listen').textContent = ncListen;
+                    document.getElementById('cmd-linux-telnet').textContent = linuxTelnet;
+                    document.getElementById('cmd-nmap-listen').textContent = nmapListen;
                 }
             },
 
@@ -6309,13 +6477,25 @@ $tcpClient.Close()`;
                 }
             },
 
+            async pastePortTarget() {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    const input = document.getElementById('port-target');
+                    input.value = text.trim();
+                    input.dispatchEvent(new Event('input'));
+                    utils.showToast('Pasted from clipboard');
+                } catch (e) {
+                    utils.showToast('Failed to paste from clipboard');
+                }
+            },
+
             clearPortScan() {
                 utils.clearElements(
                     ['port-target', 'port-range'],
                     ['port-target', 'port-protocol', 'port-range', 'port-scan-type']
                 );
                 document.getElementById('port-protocol').value = 'tcp';
-                document.querySelector('input[name="scan-type"][value="remote"]').checked = true;
+                document.querySelector('input[name="scan-type"][value="connectivity"]').checked = true;
                 this.updatePortScanVisibility();
                 this.updatePortCommands();
             },
@@ -6338,7 +6518,10 @@ $tcpClient.Close()`;
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">URL</label>
+                            <div class="label-with-actions">
+                                <label class="form-label">URL <span style="color: var(--error-color);">*</span></label>
+                                <button class="btn btn-small btn-secondary" onclick="pages.network.pasteCurlUrl()">Paste</button>
+                            </div>
                             <input type="text" id="curl-url" class="form-input" placeholder="https://api.example.com/endpoint">
                         </div>
                         <div class="form-group">
@@ -6367,26 +6550,35 @@ $tcpClient.Close()`;
                             <label class="form-label">Request Body (JSON)</label>
                             <textarea id="curl-body" class="form-textarea" placeholder='{"key": "value"}'></textarea>
                         </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="curl-insecure">
+                                Ignore SSL Certificate (-k)
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="curl-verbose">
+                                Verbose Output (-v)
+                            </label>
+                        </div>
                         <div class="flex gap-10 mt-20">
-                            <button class="btn btn-primary" onclick="pages.network.generateCurl()">Generate Curl</button>
-                            <button class="btn btn-success network-auth-btn" id="execute-request-btn" onclick="pages.network.executeRequest()" style="display: none;">Execute Request</button>
+                            <button class="btn btn-success network-auth-btn" id="execute-request-btn" onclick="pages.network.executeRequest()" style="display: none;">Execute</button>
                             <button class="btn btn-secondary" onclick="pages.network.clearCurl()">Clear</button>
                         </div>
                         <div id="curl-auth-hint" class="mt-10" style="font-size: 0.85rem; color: var(--text-muted);"></div>
                     </div>
-                    <div class="card" id="curl-result-card" style="display: none;">
+                    <div class="card" id="curl-result-card">
                         <h3 class="card-title">Generated Curl Commands</h3>
                         <div class="form-group">
                             <div class="label-with-actions">
                                 <label class="form-label">Windows (CMD/PowerShell)</label>
-                                <button class="btn btn-secondary btn-small" onclick="pages.network.copyCurl('windows')">Copy</button>
+                                <button class="btn btn-secondary btn-small" onclick="pages.network.copyCurl('windows')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                             </div>
                             <pre class="result-box" id="curl-windows" style="margin: 0; white-space: pre-wrap;"></pre>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
                             <div class="label-with-actions">
                                 <label class="form-label">Linux/macOS (Bash)</label>
-                                <button class="btn btn-secondary btn-small" onclick="pages.network.copyCurl('linux')">Copy</button>
+                                <button class="btn btn-secondary btn-small" onclick="pages.network.copyCurl('linux')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                             </div>
                             <pre class="result-box" id="curl-linux" style="margin: 0; white-space: pre-wrap;"></pre>
                         </div>
@@ -6398,38 +6590,146 @@ $tcpClient.Close()`;
                             <div id="curl-status" class="result-box" style="max-height: 50px;"></div>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">Response Body</label>
-                            <pre class="result-box" id="curl-response" style="max-height: 300px; margin: 0; white-space: pre-wrap;"></pre>
+                            <div class="label-with-actions">
+                                <label class="form-label">Response</label>
+                                <button class="btn btn-secondary btn-small" onclick="pages.network.copyResponse()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                            </div>
+                            <pre class="result-box" id="curl-response" style="max-height: 400px; margin: 0; white-space: pre-wrap;"></pre>
                         </div>
                     </div>
                 `;
+            },
+
+            copyResponse() {
+                const response = document.getElementById('curl-response').textContent;
+                if (response) {
+                    utils.copyToClipboard(response);
+                }
+            },
+
+            async pasteCurlUrl() {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    const input = document.getElementById('curl-url');
+                    input.value = text.trim();
+                    input.dispatchEvent(new Event('input'));
+                    utils.showToast('Pasted from clipboard');
+                } catch (e) {
+                    utils.showToast('Failed to paste from clipboard');
+                }
             },
 
             initCurl() {
                 const method = document.getElementById('curl-method');
                 const url = document.getElementById('curl-url');
                 const body = document.getElementById('curl-body');
+                const insecure = document.getElementById('curl-insecure');
+                const verbose = document.getElementById('curl-verbose');
 
                 utils.loadFromStorage('curl-method', (v) => method.value = v);
                 utils.loadFromStorage('curl-url', (v) => url.value = v);
                 utils.loadFromStorage('curl-body', (v) => body.value = v);
+                utils.loadFromStorage('curl-insecure', (v) => insecure.checked = v === 'true');
+                utils.loadFromStorage('curl-verbose', (v) => verbose.checked = v === 'true');
 
-                method.addEventListener('change', () => utils.saveToStorage('curl-method', method.value));
-                url.addEventListener('input', () => utils.saveToStorage('curl-url', url.value));
-                body.addEventListener('input', () => utils.saveToStorage('curl-body', body.value));
+                // Load saved headers
+                utils.loadFromStorage('curl-headers', (v) => {
+                    try {
+                        const headers = JSON.parse(v);
+                        if (Array.isArray(headers) && headers.length > 0) {
+                            const container = document.getElementById('curl-headers');
+                            container.innerHTML = headers.map(h => `
+                                <div class="header-row">
+                                    <input type="text" class="form-input header-key" placeholder="Header name" value="${this.escapeHtml(h.key || '')}">
+                                    <input type="text" class="form-input header-value" placeholder="Header value" value="${this.escapeHtml(h.value || '')}">
+                                    <button class="btn btn-secondary btn-small" onclick="pages.network.removeHeader(this)">✕</button>
+                                </div>
+                            `).join('');
+                        }
+                    } catch (e) {}
+                });
+
+                // Load saved params
+                utils.loadFromStorage('curl-params', (v) => {
+                    try {
+                        const params = JSON.parse(v);
+                        if (Array.isArray(params) && params.length > 0) {
+                            const container = document.getElementById('curl-params');
+                            container.innerHTML = params.map(p => `
+                                <div class="header-row">
+                                    <input type="text" class="form-input param-key" placeholder="Parameter name" value="${this.escapeHtml(p.key || '')}">
+                                    <input type="text" class="form-input param-value" placeholder="Parameter value" value="${this.escapeHtml(p.value || '')}">
+                                    <button class="btn btn-secondary btn-small" onclick="pages.network.removeParam(this)">✕</button>
+                                </div>
+                            `).join('');
+                        }
+                    } catch (e) {}
+                });
+
+                method.addEventListener('change', () => {
+                    utils.saveToStorage('curl-method', method.value);
+                    this.updateCurlCommands();
+                });
+                url.addEventListener('input', () => {
+                    utils.saveToStorage('curl-url', url.value);
+                    this.updateCurlCommands();
+                });
+                body.addEventListener('input', () => {
+                    utils.saveToStorage('curl-body', body.value);
+                    this.updateCurlCommands();
+                });
+                insecure.addEventListener('change', () => {
+                    utils.saveToStorage('curl-insecure', insecure.checked);
+                    this.updateCurlCommands();
+                });
+                verbose.addEventListener('change', () => {
+                    utils.saveToStorage('curl-verbose', verbose.checked);
+                    this.updateCurlCommands();
+                });
+
+                // Headers와 Params에도 이벤트 리스너 추가
+                document.getElementById('curl-headers').addEventListener('input', () => {
+                    this.saveCurlHeaders();
+                    this.updateCurlCommands();
+                });
+                document.getElementById('curl-params').addEventListener('input', () => {
+                    this.saveCurlParams();
+                    this.updateCurlCommands();
+                });
 
                 // Auth 상태에 따른 UI 표시
                 const authHint = document.getElementById('curl-auth-hint');
                 const executeBtn = document.getElementById('execute-request-btn');
-                const isAuthorized = window.serverMode && window.serverMode.authenticated;
 
-                if (isAuthorized) {
-                    if (executeBtn) executeBtn.style.display = 'inline-flex';
-                    if (authHint) authHint.innerHTML = '✓ <span style="color: var(--success-color);">Server proxy enabled</span> - CORS restrictions bypassed';
-                } else {
-                    if (executeBtn) executeBtn.style.display = 'none';
-                    if (authHint) authHint.innerHTML = '<span style="color: var(--primary-color);">Login</span> to execute requests via server proxy.';
-                }
+                if (executeBtn) executeBtn.style.display = 'inline-flex';
+                if (authHint) authHint.style.display = 'none';
+
+                // 초기 명령어 생성
+                this.updateCurlCommands();
+            },
+
+            escapeHtml(str) {
+                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            },
+
+            saveCurlHeaders() {
+                const headers = [];
+                document.querySelectorAll('#curl-headers .header-row').forEach(row => {
+                    const key = row.querySelector('.header-key').value;
+                    const value = row.querySelector('.header-value').value;
+                    headers.push({ key, value });
+                });
+                utils.saveToStorage('curl-headers', JSON.stringify(headers));
+            },
+
+            saveCurlParams() {
+                const params = [];
+                document.querySelectorAll('#curl-params .header-row').forEach(row => {
+                    const key = row.querySelector('.param-key').value;
+                    const value = row.querySelector('.param-value').value;
+                    params.push({ key, value });
+                });
+                utils.saveToStorage('curl-params', JSON.stringify(params));
             },
 
             addHeader() {
@@ -6442,6 +6742,8 @@ $tcpClient.Close()`;
                     <button class="btn btn-secondary btn-small" onclick="pages.network.removeHeader(this)">✕</button>
                 `;
                 container.appendChild(row);
+                this.saveCurlHeaders();
+                this.updateCurlCommands();
             },
 
             removeHeader(btn) {
@@ -6451,6 +6753,8 @@ $tcpClient.Close()`;
                 } else {
                     btn.parentElement.querySelectorAll('input').forEach(i => i.value = '');
                 }
+                this.saveCurlHeaders();
+                this.updateCurlCommands();
             },
 
             addParam() {
@@ -6463,6 +6767,8 @@ $tcpClient.Close()`;
                     <button class="btn btn-secondary btn-small" onclick="pages.network.removeParam(this)">✕</button>
                 `;
                 container.appendChild(row);
+                this.saveCurlParams();
+                this.updateCurlCommands();
             },
 
             removeParam(btn) {
@@ -6472,17 +6778,16 @@ $tcpClient.Close()`;
                 } else {
                     btn.parentElement.querySelectorAll('input').forEach(i => i.value = '');
                 }
+                this.saveCurlParams();
+                this.updateCurlCommands();
             },
 
-            generateCurl() {
+            updateCurlCommands() {
                 const method = document.getElementById('curl-method').value;
-                let url = document.getElementById('curl-url').value.trim();
+                let url = document.getElementById('curl-url').value.trim() || 'https://example.com/api';
                 const body = document.getElementById('curl-body').value.trim();
-
-                if (!url) {
-                    utils.showToast('Please enter a URL');
-                    return;
-                }
+                const insecure = document.getElementById('curl-insecure').checked;
+                const verbose = document.getElementById('curl-verbose').checked;
 
                 // Collect headers
                 const headers = [];
@@ -6505,14 +6810,23 @@ $tcpClient.Close()`;
                 });
 
                 // Build URL with params
-                if (params.length > 0) {
-                    const urlObj = new URL(url.startsWith('http') ? url : 'https://' + url);
-                    params.forEach(p => urlObj.searchParams.append(p.key, p.value));
-                    url = urlObj.toString();
+                try {
+                    if (params.length > 0) {
+                        const urlObj = new URL(url.startsWith('http') ? url : 'https://' + url);
+                        params.forEach(p => urlObj.searchParams.append(p.key, p.value));
+                        url = urlObj.toString();
+                    }
+                } catch (e) {
+                    // Invalid URL, use as-is
                 }
 
+                // Options flags
+                let flags = '';
+                if (insecure) flags += ' -k';
+                if (verbose) flags += ' -v';
+
                 // Generate Windows curl
-                let winCurl = `curl -X ${method}`;
+                let winCurl = `curl${flags} -X ${method}`;
                 headers.forEach(h => {
                     winCurl += ` -H "${h.key}: ${h.value}"`;
                 });
@@ -6523,7 +6837,7 @@ $tcpClient.Close()`;
                 winCurl += ` "${url}"`;
 
                 // Generate Linux curl
-                let linuxCurl = `curl -X ${method}`;
+                let linuxCurl = `curl${flags} -X ${method}`;
                 headers.forEach(h => {
                     linuxCurl += ` -H '${h.key}: ${h.value}'`;
                 });
@@ -6534,7 +6848,6 @@ $tcpClient.Close()`;
 
                 document.getElementById('curl-windows').textContent = winCurl;
                 document.getElementById('curl-linux').textContent = linuxCurl;
-                document.getElementById('curl-result-card').style.display = 'block';
 
                 this.generatedCurl = { windows: winCurl, linux: linuxCurl };
             },
@@ -6546,14 +6859,14 @@ $tcpClient.Close()`;
             },
 
             async executeRequest() {
+                if (!utils.validateRequired('curl-url')) return;
+
                 const method = document.getElementById('curl-method').value;
                 let url = document.getElementById('curl-url').value.trim();
                 const body = document.getElementById('curl-body').value.trim();
 
-                if (!url) {
-                    utils.showToast('Please enter a URL');
-                    return;
-                }
+                // Hide Generated Curl Commands
+                document.getElementById('curl-result-card').style.display = 'none';
 
                 if (!url.startsWith('http')) {
                     url = 'https://' + url;
@@ -6595,13 +6908,14 @@ $tcpClient.Close()`;
                 responseCard.style.display = 'block';
 
                 // Authorized 상태면 Backend 프록시 사용 (CORS 우회)
-                const isAuthorized = window.serverMode && window.serverMode.authenticated;
+                const isAuthorized = window.serverMode && window.serverMode.enabled;
 
                 try {
-                    let responseStatus, responseStatusText, responseBody, latency;
+                    let responseStatus, responseStatusText, responseBody, responseHeaders, responseUrl, latency;
 
                     if (isAuthorized) {
                         // Backend API 사용
+                        const insecure = document.getElementById('curl-insecure').checked;
                         const apiResponse = await fetch('/api/network/http', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -6610,7 +6924,8 @@ $tcpClient.Close()`;
                                 url,
                                 method,
                                 headers,
-                                body: body || undefined
+                                body: body || undefined,
+                                insecure
                             })
                         });
 
@@ -6623,6 +6938,8 @@ $tcpClient.Close()`;
                         responseStatus = data.status;
                         responseStatusText = data.statusText;
                         responseBody = data.body;
+                        responseHeaders = data.headers || {};
+                        responseUrl = data.url || url;
                         latency = data.latency;
                     } else {
                         // 직접 fetch (CORS 제한 있음)
@@ -6646,6 +6963,11 @@ $tcpClient.Close()`;
                         responseStatus = response.status;
                         responseStatusText = response.statusText;
                         responseBody = await response.text();
+                        responseHeaders = {};
+                        response.headers.forEach((value, key) => {
+                            responseHeaders[key] = value;
+                        });
+                        responseUrl = response.url;
                     }
 
                     const isOk = responseStatus >= 200 && responseStatus < 300;
@@ -6653,29 +6975,73 @@ $tcpClient.Close()`;
                         (latency ? ` <span style="color: var(--text-muted);">(${latency}ms)</span>` : '');
                     statusEl.style.color = isOk ? 'var(--success-color)' : 'var(--error-color)';
 
-                    try {
-                        const json = JSON.parse(responseBody);
-                        responseEl.textContent = JSON.stringify(json, null, 2);
-                    } catch {
-                        responseEl.textContent = responseBody;
+                    // Verbose 옵션 확인
+                    const verbose = document.getElementById('curl-verbose').checked;
+
+                    if (verbose) {
+                        // Verbose 모드: 상세 정보 표시
+                        let verboseOutput = '';
+                        verboseOutput += `> ${method} ${responseUrl}\n`;
+                        Object.entries(headers).forEach(([key, value]) => {
+                            verboseOutput += `> ${key}: ${value}\n`;
+                        });
+                        verboseOutput += `>\n`;
+                        verboseOutput += `< HTTP/1.1 ${responseStatus} ${responseStatusText}\n`;
+                        Object.entries(responseHeaders).forEach(([key, value]) => {
+                            verboseOutput += `< ${key}: ${value}\n`;
+                        });
+                        verboseOutput += `<\n\n`;
+
+                        try {
+                            const json = JSON.parse(responseBody);
+                            verboseOutput += JSON.stringify(json, null, 2);
+                        } catch {
+                            verboseOutput += responseBody;
+                        }
+                        responseEl.textContent = verboseOutput;
+                    } else {
+                        // 일반 모드: Body만 표시
+                        try {
+                            const json = JSON.parse(responseBody);
+                            responseEl.textContent = JSON.stringify(json, null, 2);
+                        } catch {
+                            responseEl.textContent = responseBody;
+                        }
                     }
                 } catch (e) {
-                    statusEl.textContent = 'Error';
+                    // Status에 에러 타입과 코드 표시
+                    const errorType = e.name || 'UnknownError';
+                    const errorCode = e.code || 'N/A';
+                    statusEl.textContent = `${errorType} [${errorCode}]`;
                     statusEl.style.color = 'var(--error-color)';
-                    let errorMsg = e.message;
-                    if (!isAuthorized) {
-                        errorMsg += '\n\nTip: Login to bypass CORS restrictions using server proxy.';
+
+                    // 자세한 오류 정보 표시
+                    let errorDetail = `Error: ${e.message}\n\n`;
+                    errorDetail += `Request Details:\n`;
+                    errorDetail += `- URL: ${url}\n`;
+                    errorDetail += `- Method: ${method}\n`;
+                    if (errorType) errorDetail += `- Error Type: ${errorType}\n`;
+                    if (errorCode) errorDetail += `- Error Code: ${errorCode}\n`;
+
+                    if (e.name === 'TypeError' && e.message.includes('Failed to fetch')) {
+                        errorDetail += `\nPossible Causes:\n`;
+                        errorDetail += `- CORS policy blocking the request\n`;
+                        errorDetail += `- Network connection issue\n`;
+                        errorDetail += `- Invalid URL or server not reachable\n`;
+                        errorDetail += `- SSL/TLS certificate error\n`;
+                        if (!window.serverMode?.enabled) {
+                            errorDetail += `\nTip: Enable backend server to bypass CORS restrictions.`;
+                        }
                     }
-                    responseEl.textContent = errorMsg;
+
+                    responseEl.textContent = errorDetail;
                 }
             },
 
             clearCurl() {
                 document.getElementById('curl-method').value = 'GET';
                 utils.clearElements(['curl-url', 'curl-body'], ['curl-method', 'curl-url', 'curl-body']);
-                ['curl-result-card', 'curl-response-card'].forEach(id => {
-                    document.getElementById(id).style.display = 'none';
-                });
+                document.getElementById('curl-response-card').style.display = 'none';
 
                 // Reset headers to single empty row
                 document.getElementById('curl-headers').innerHTML = `
@@ -6695,7 +7061,12 @@ $tcpClient.Close()`;
                     </div>
                 `;
 
+                // Clear saved headers and params
+                utils.saveToStorage('curl-headers', '[]');
+                utils.saveToStorage('curl-params', '[]');
+
                 this.generatedCurl = null;
+                this.updateCurlCommands();
             }
         }
     };

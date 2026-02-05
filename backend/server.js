@@ -1,5 +1,7 @@
 const express = require('express');
 const fetch = require('node-fetch');
+const https = require('https');
+const http = require('http');
 const { VM } = require('vm2');
 const tls = require('tls');
 const dns = require('dns').promises;
@@ -7,38 +9,13 @@ const dns = require('dns').promises;
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// nginx가 Basic Auth 처리 후 X-Auth-User 헤더 전달
-const getAuthUser = (req) => req.headers['x-auth-user'];
-
-// 인증 필요 미들웨어
-const requireAuth = (req, res, next) => {
-    if (!getAuthUser(req)) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    next();
-};
-
-// 인증 상태 확인
+// Backend 상태 확인 (프론트엔드에서 Server 모드 감지용)
 app.get('/api/auth/check', (req, res) => {
-    const user = getAuthUser(req);
-    res.json({
-        authenticated: !!user,
-        user: user || null
-    });
+    res.json({ ok: true });
 });
 
-// 로그인 (nginx Basic Auth 후 리다이렉트)
-app.get('/api/auth/login', (req, res) => {
-    res.redirect('/');
-});
-
-// 로그아웃 (401 반환하여 브라우저 credentials 캐시 삭제)
-app.get('/api/auth/logout', (req, res) => {
-    res.status(401).json({ message: 'Logged out' });
-});
-
-// SSL 인증서 가져오기 (인증 필요)
-app.post('/api/cert/fetch', requireAuth, (req, res) => {
+// SSL 인증서 가져오기
+app.post('/api/cert/fetch', (req, res) => {
     const { host, port = 443 } = req.body;
 
     if (!host) {
@@ -95,8 +72,8 @@ app.post('/api/cert/fetch', requireAuth, (req, res) => {
     });
 });
 
-// 파일 다운로드 프록시 (인증 필요)
-app.get('/api/download', requireAuth, async (req, res) => {
+// 파일 다운로드 프록시
+app.get('/api/download', async (req, res) => {
     try {
         const { url } = req.query;
 
@@ -148,8 +125,8 @@ app.get('/api/download', requireAuth, async (req, res) => {
     }
 });
 
-// DNS 조회 (인증 필요)
-app.post('/api/network/dns', requireAuth, async (req, res) => {
+// DNS 조회
+app.post('/api/network/dns', async (req, res) => {
     const { host, type = 'A' } = req.body;
 
     if (!host) {
@@ -202,9 +179,9 @@ app.post('/api/network/dns', requireAuth, async (req, res) => {
     }
 });
 
-// HTTP 요청 실행 (인증 필요) - CORS 우회
-app.post('/api/network/http', requireAuth, async (req, res) => {
-    const { url, method = 'GET', headers = {}, body } = req.body;
+// HTTP 요청 실행 - CORS 우회
+app.post('/api/network/http', async (req, res) => {
+    const { url, method = 'GET', headers = {}, body, insecure = false } = req.body;
 
     if (!url) {
         return res.status(400).json({ error: 'URL is required' });
@@ -224,6 +201,11 @@ app.post('/api/network/http', requireAuth, async (req, res) => {
                 ...headers
             }
         };
+
+        // SSL 인증서 무시 옵션
+        if (insecure && parsedUrl.protocol === 'https:') {
+            options.agent = new https.Agent({ rejectUnauthorized: false });
+        }
 
         if (body && ['POST', 'PUT', 'PATCH'].includes(method.toUpperCase())) {
             options.body = typeof body === 'string' ? body : JSON.stringify(body);
@@ -253,8 +235,8 @@ app.post('/api/network/http', requireAuth, async (req, res) => {
     }
 });
 
-// API 프록시 (인증 필요)
-app.post('/api/proxy', requireAuth, async (req, res) => {
+// API 프록시
+app.post('/api/proxy', async (req, res) => {
     try {
         const { url, options = {} } = req.body;
 
@@ -289,8 +271,8 @@ app.post('/api/proxy', requireAuth, async (req, res) => {
     }
 });
 
-// 코드 실행 (인증 필요, JavaScript 샌드박스)
-app.post('/api/execute', requireAuth, (req, res) => {
+// 코드 실행 (JavaScript 샌드박스)
+app.post('/api/execute', (req, res) => {
     try {
         const { code, language } = req.body;
 
