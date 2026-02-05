@@ -66,16 +66,13 @@ php -S localhost:8080
 브라우저에서 `http://localhost:8080` 접속
 
 ### 방법 3: Authorized 모드 (서버 배포)
-nginx + Node.js 백엔드 서버 배포로 추가 기능을 사용할 수 있습니다.
+Node.js 서버 배포로 추가 기능을 사용할 수 있습니다.
 
 ```bash
-# 1. .htpasswd 파일 생성
-htpasswd -c nginx/.htpasswd username
+# 서버 실행
+npm install && npm start  # http://localhost:3000
 
-# 2. 백엔드 서버 실행
-cd backend && npm install && npm start
-
-# 3. nginx 설정 후 실행
+# nginx 프록시 (선택사항)
 # nginx/nginx.conf 참고
 ```
 
@@ -93,16 +90,13 @@ online-tools/
 ├── index.html          # 메인 HTML (사이드바 네비게이션, 인증 UI)
 ├── app.js              # 전체 애플리케이션 로직 (IIFE, serverMode 포함)
 ├── styles.css          # 스타일시트 (다크/라이트 테마)
+├── server.js           # Express 서버 (정적 파일 + API)
+├── package.json        # Node.js 의존성
 ├── CLAUDE.md           # Claude Code 가이드
 ├── README.md           # 이 파일
 │
-├── backend/            # Node.js 백엔드 (Authorized 모드)
-│   ├── server.js       # Express API 서버
-│   └── package.json    # Node.js 의존성
-│
-└── nginx/              # nginx 설정 (Authorized 모드)
-    ├── nginx.conf      # nginx 설정 파일
-    └── .htpasswd       # Basic Auth 인증 파일
+└── nginx/              # nginx 설정 (선택사항, 프록시용)
+    └── nginx.conf      # nginx 설정 파일
 ```
 
 ## 기술 스택

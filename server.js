@@ -1,13 +1,18 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const https = require('https');
-const http = require('http');
 const { VM } = require('vm2');
 const tls = require('tls');
 const dns = require('dns').promises;
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
+
+// 정적 파일 서빙 (frontend) - 캐시 설정 포함
+app.use(express.static(__dirname, {
+    maxAge: '1h',
+    etag: true
+}));
 
 // Backend 상태 확인 (프론트엔드에서 Server 모드 감지용)
 app.get('/api/auth/check', (req, res) => {
@@ -29,13 +34,20 @@ app.post('/api/cert/fetch', (req, res) => {
         rejectUnauthorized: false  // 만료/자체서명 인증서도 가져오기
     };
 
+    let responded = false;
+    const sendResponse = (statusCode, data) => {
+        if (responded) return;
+        responded = true;
+        res.status(statusCode).json(data);
+    };
+
     const socket = tls.connect(options, () => {
         try {
             const cert = socket.getPeerCertificate(true);
 
             if (!cert || Object.keys(cert).length === 0) {
                 socket.destroy();
-                return res.status(400).json({ error: 'No certificate found' });
+                return sendResponse(400, { error: 'No certificate found' });
             }
 
             // PEM 형식으로 변환
@@ -44,7 +56,7 @@ app.post('/api/cert/fetch', (req, res) => {
                 '\n-----END CERTIFICATE-----';
 
             socket.destroy();
-            res.json({
+            sendResponse(200, {
                 success: true,
                 pem: pemCert,
                 info: {
@@ -57,18 +69,18 @@ app.post('/api/cert/fetch', (req, res) => {
             });
         } catch (e) {
             socket.destroy();
-            res.status(500).json({ error: e.message });
+            sendResponse(500, { error: e.message });
         }
     });
 
     socket.setTimeout(10000);
     socket.on('timeout', () => {
         socket.destroy();
-        res.status(504).json({ error: 'Connection timeout' });
+        sendResponse(504, { error: 'Connection timeout' });
     });
 
     socket.on('error', (err) => {
-        res.status(500).json({ error: err.message });
+        sendResponse(500, { error: err.message });
     });
 });
 
@@ -308,5 +320,5 @@ app.post('/api/execute', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Backend server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
