@@ -100,7 +100,19 @@ Server 모드에서 추가로 사용할 수 있는 기능:
 
 ### 방법 4: Docker (컨테이너 배포)
 ```bash
-# docker-compose로 실행
+# Docker 이미지 빌드
+docker build -t online-tools .
+
+# 캐시 없이 새로 빌드
+docker build --no-cache -t online-tools .
+
+# 태그 지정 빌드
+docker build -t online-tools:1.0 .
+
+# docker-compose로 빌드 + 실행
+docker-compose up -d --build
+
+# docker-compose로 실행 (기존 이미지 사용)
 docker-compose up -d
 
 # 포트 변경
