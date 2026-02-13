@@ -2349,13 +2349,14 @@ Use \`console.log()\` to print messages.
 
         // Converter Page
         converter: {
-            tabs: ['radix', 'byte'],
+            tabs: ['radix', 'byte', 'time'],
 
             render(activeTab) {
                 activeTab = activeTab || 'radix';
                 const tabLabels = {
                     radix: 'Radix',
-                    byte: 'Byte'
+                    byte: 'Byte',
+                    time: 'Time'
                 };
 
                 let content = '';
@@ -2365,6 +2366,9 @@ Use \`console.log()\` to print messages.
                         break;
                     case 'byte':
                         content = this.renderByte();
+                        break;
+                    case 'time':
+                        content = this.renderTime();
                         break;
                 }
 
@@ -2411,31 +2415,79 @@ Use \`console.log()\` to print messages.
             renderByte() {
                 return `
                     <div class="card">
-                        <div class="form-group">
-                            <label class="form-label">Bit</label>
-                            <input type="text" id="size-bit" class="form-input" placeholder="e.g., 8">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Byte</label>
-                            <input type="text" id="size-byte" class="form-input" placeholder="e.g., 1">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">KB (Kilobyte)</label>
-                            <input type="text" id="size-kb" class="form-input" placeholder="e.g., 0.001">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">MB (Megabyte)</label>
-                            <input type="text" id="size-mb" class="form-input" placeholder="e.g., 0.000001">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">GB (Gigabyte)</label>
-                            <input type="text" id="size-gb" class="form-input" placeholder="e.g., 0.000000001">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">TB (Terabyte)</label>
-                            <input type="text" id="size-tb" class="form-input" placeholder="e.g., 0.000000000001">
+                        <div class="two-column" style="gap: 15px;">
+                            <div class="form-group">
+                                <label class="form-label">Bit</label>
+                                <input type="text" id="size-bit" class="form-input" placeholder="e.g., 8">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Byte</label>
+                                <input type="text" id="size-byte" class="form-input" placeholder="e.g., 1">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">KB (Kilobyte)</label>
+                                <input type="text" id="size-kb" class="form-input" placeholder="e.g., 0.001">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">MB (Megabyte)</label>
+                                <input type="text" id="size-mb" class="form-input" placeholder="e.g., 0.000001">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">GB (Gigabyte)</label>
+                                <input type="text" id="size-gb" class="form-input" placeholder="e.g., 0.000000001">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">TB (Terabyte)</label>
+                                <input type="text" id="size-tb" class="form-input" placeholder="e.g., 0.000000000001">
+                            </div>
                         </div>
                         <button class="btn btn-secondary mt-10" onclick="pages.converter.clearByte()">Clear</button>
+                    </div>
+                `;
+            },
+
+            renderTime() {
+                return `
+                    <div class="card">
+                        <div class="two-column" style="gap: 15px;">
+                            <div class="form-group">
+                                <label class="form-label">Year (년)</label>
+                                <input type="text" id="time-year" class="form-input" placeholder="e.g., 1">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Month (월, 30일 기준)</label>
+                                <input type="text" id="time-month" class="form-input" placeholder="e.g., 12">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Week (주)</label>
+                                <input type="text" id="time-week" class="form-input" placeholder="e.g., 52">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Day (일)</label>
+                                <input type="text" id="time-day" class="form-input" placeholder="e.g., 365">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Hour (시간)</label>
+                                <input type="text" id="time-hour" class="form-input" placeholder="e.g., 8760">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Minute (분)</label>
+                                <input type="text" id="time-minute" class="form-input" placeholder="e.g., 525600">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Second (초)</label>
+                                <input type="text" id="time-second" class="form-input" placeholder="e.g., 31536000">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Millisecond (밀리초)</label>
+                                <input type="text" id="time-ms" class="form-input" placeholder="e.g., 1000">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Microsecond (마이크로초)</label>
+                                <input type="text" id="time-us" class="form-input" placeholder="e.g., 1000000">
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary mt-10" onclick="pages.converter.clearTime()">Clear</button>
                     </div>
                 `;
             },
@@ -2449,6 +2501,9 @@ Use \`console.log()\` to print messages.
                         break;
                     case 'byte':
                         this.initByte();
+                        break;
+                    case 'time':
+                        this.initTime();
                         break;
                 }
             },
@@ -2551,6 +2606,56 @@ Use \`console.log()\` to print messages.
                 utils.clearElements(
                     ['size-bit', 'size-byte', 'size-kb', 'size-mb', 'size-gb', 'size-tb'],
                     ['byte-bit']
+                );
+            },
+
+            initTime() {
+                const units = ['year', 'month', 'week', 'day', 'hour', 'minute', 'second', 'ms', 'us'];
+                const multipliers = {
+                    us: 1,
+                    ms: 1000,
+                    second: 1000000,
+                    minute: 60000000,
+                    hour: 3600000000,
+                    day: 86400000000,
+                    week: 604800000000,
+                    month: 2592000000000,
+                    year: 31536000000000
+                };
+
+                const updateAll = (microseconds, source) => {
+                    units.forEach(unit => {
+                        if (unit !== source) {
+                            const value = microseconds / multipliers[unit];
+                            document.getElementById(`time-${unit}`).value =
+                                value === 0 ? '' :
+                                value % 1 === 0 ? value : value.toFixed(6).replace(/\.?0+$/, '');
+                        }
+                    });
+                    utils.saveToStorage('time-us', document.getElementById('time-us').value);
+                };
+
+                utils.loadFromStorage('time-us', (savedUs) => {
+                    if (savedUs !== '') {
+                        document.getElementById('time-us').value = savedUs;
+                        updateAll(parseFloat(savedUs), 'us');
+                    }
+                });
+
+                units.forEach(unit => {
+                    document.getElementById(`time-${unit}`).addEventListener('input', (e) => {
+                        const value = parseFloat(e.target.value);
+                        if (!isNaN(value)) {
+                            updateAll(value * multipliers[unit], unit);
+                        }
+                    });
+                });
+            },
+
+            clearTime() {
+                utils.clearElements(
+                    ['time-year', 'time-month', 'time-week', 'time-day', 'time-hour', 'time-minute', 'time-second', 'time-ms', 'time-us'],
+                    ['time-us']
                 );
             }
         },

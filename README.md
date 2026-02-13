@@ -38,6 +38,7 @@
 | | Timezone | 시간대 변환 |
 | | Radix | 진수 변환 (2, 8, 10, 16진수) |
 | | DataSize | 데이터 크기 변환 (Bit ~ TB) |
+| | Time | 시간 단위 변환 (Year ~ Microsecond) |
 | Encrypt | Hash | 해시 생성 (MD5, SHA-1, SHA-256, SHA-512) |
 | | Certificate | PEM 파싱, 인증서 조회 명령어, **URL 조회 (Server)** |
 | Calculator | String | 문자열 통계 계산 |
